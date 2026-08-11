@@ -1,0 +1,74 @@
+/* Global Cosmetic Ad Blocking Rules */
+
+ins.adsbygoogle,
+[id^="google_ads_"],
+[id^="div-gpt-ad"],
+iframe[src*="doubleclick.net"],
+iframe[src*="googlesyndication.com"],
+iframe[src*="amazon-adsystem.com"],
+iframe[src*="criteo.com"],
+iframe[src*="rubiconproject.com"],
+iframe[src*="adsterra"],
+iframe[src*="exoclick"],
+iframe[src*="juicyads"],
+iframe[src*="monetag"],
+.ad-container,
+.ad-box,
+.ad-wrapper,
+.ad-slot,
+.ad-unit,
+.ads-wrapper,
+.ad_wrapper,
+.ad_slot,
+.ad_container,
+.adsbygoogle,
+.ad-banner,
+.ad-header,
+.ad-footer,
+.ad-sidebar,
+.banner-ad,
+.sidebar-ad,
+.widget-ad,
+.taboola,
+.outbrain-wrapper,
+.outbrain_widget_container,
+[class*="taboola"],
+[class*="outbrain"],
+[class*="popunder"],
+[class*="popup-ad"],
+[id*="popunder"],
+[id*="popup-ad"],
+.overlay-ad,
+#overlay-ad,
+.sponsored-post,
+.sponsored-tag,
+[data-ad-slot],
+[data-ad-unit],
+[aria-label="Sponsored"],
+/* YouTube Ad Selectors */
+#player-ads,
+ytd-promoted-sparkles-web-renderer,
+ytd-display-ad-renderer,
+ytd-ad-slot-renderer,
+ytd-banner-promo-renderer,
+ytd-in-feed-ad-layout-renderer,
+ytd-statement-banner-renderer,
+.ytp-ad-overlay-container,
+.ytp-ad-message-container,
+.ytp-ad-action-interstitial,
+.ytp-ad-progress-list,
+.ytp-block-autonav-wipe-results,
+/* Popunder & Clickjack Overlay Protection */
+.click-jack-overlay,
+.popunder-overlay,
+div[id*="popunder_"],
+div[class*="popunder_"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
