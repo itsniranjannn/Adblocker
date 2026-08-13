@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Lightweight Ad Blocker",
-  "version": "1.2",
-  "description": "Ultra-fast ad blocker with popunder & clickunder shield, YouTube video ad auto-skip, Facebook sponsored cleaner, and dynamic dark UI.",
+  "name": "Lightweight Ad Blocker Pro",
+  "version": "2.0",
+  "description": "Ultra-lightweight ad blocker with zero-CPU cosmetic engine, popunder & clickunder shield, YouTube auto-skip, and modern dark UI.",
   "permissions": [
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
@@ -42,7 +42,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Lightweight Ad Blocker"
+    "default_title": "Lightweight Ad Blocker Pro"
   },
   "declarative_net_request": {
     "rule_resources": [
@@ -56,6 +56,7 @@
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "128": "icons/icon128.png",
+    "512": "icons/icon512.png"
   }
 }

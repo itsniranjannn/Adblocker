@@ -1,4 +1,4 @@
-// Popup Script for Lightweight Ad Blocker
+// Popup Script for Ultra-Lightweight Ad Blocker
 
 document.addEventListener('DOMContentLoaded', () => {
   const totalBlockedEl = document.getElementById('totalBlocked');
@@ -14,9 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentTotal = 0;
 
-  // Counter-up animation helper
+  // Smooth counter-up animation
   function animateValue(obj, start, end, duration) {
-    if (start === end) return;
+    if (start === end) {
+      obj.textContent = end.toLocaleString();
+      return;
+    }
     let startTimestamp = null;
     const step = (timestamp) => {
       if (!startTimestamp) startTimestamp = timestamp;
@@ -30,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.requestAnimationFrame(step);
   }
 
-  // Load and update statistics
+  // Load and render stats & toggles
   function updateUI() {
     chrome.storage.local.get(['stats', 'settings'], (res) => {
       const stats = res.stats || {};
@@ -40,13 +43,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const popups = stats.popupsBlocked || 0;
       const yt = stats.ytAdsSkipped || 0;
       const fb = stats.fbSponsoredRemoved || 0;
-      const trackers = stats.trackersBlocked || 0;
 
-      const total = ads + popups + yt + fb + trackers;
+      const total = ads + popups + yt + fb;
 
       if (total !== currentTotal) {
-        animateValue(totalBlockedEl, currentTotal, total, 400);
+        animateValue(totalBlockedEl, currentTotal, total, 300);
         currentTotal = total;
+      } else {
+        totalBlockedEl.textContent = total.toLocaleString();
       }
 
       adsBlockedEl.textContent = ads.toLocaleString();
@@ -60,11 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Toggles
-  togglePopupsEl.addEventListener('change', (e) => saveSetting('blockPopups', e.target.checked));
-  toggleYTEl.addEventListener('change', (e) => saveSetting('ytAutoSkip', e.target.checked));
-  toggleFBEl.addEventListener('change', (e) => saveSetting('fbCleaner', e.target.checked));
-
+  // Save toggle settings
   function saveSetting(key, val) {
     chrome.storage.local.get(['settings'], (res) => {
       const settings = res.settings || {};
@@ -73,17 +73,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Reset
+  togglePopupsEl.addEventListener('change', (e) => saveSetting('blockPopups', e.target.checked));
+  toggleYTEl.addEventListener('change', (e) => saveSetting('ytAutoSkip', e.target.checked));
+  toggleFBEl.addEventListener('change', (e) => saveSetting('fbCleaner', e.target.checked));
+
+  // Reset threat stats button
   resetStatsBtn.addEventListener('click', () => {
-    resetStatsBtn.style.transform = 'scale(0.96)';
+    resetStatsBtn.style.transform = 'scale(0.97)';
     setTimeout(() => resetStatsBtn.style.transform = 'none', 150);
 
     const emptyStats = {
       adsBlocked: 0,
       popupsBlocked: 0,
       ytAdsSkipped: 0,
-      fbSponsoredRemoved: 0,
-      trackersBlocked: 0
+      fbSponsoredRemoved: 0
     };
     currentTotal = 0;
     chrome.storage.local.set({ stats: emptyStats }, () => {
