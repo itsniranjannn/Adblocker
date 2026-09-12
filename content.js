@@ -112,6 +112,53 @@
     const target = e.target;
     if (!target) return;
 
+    // ── NEW: TRANSPARENT OVERLAY LINK DETECTION ──────────────────────────────
+    // Piracy sites place an invisible <a target="_blank" href="https://ad.com">
+    // covering the whole page. Clicking ANYWHERE follows that link natively —
+    // no JS involved, so window.open interception is completely bypassed.
+    // Detect and kill these in the capture phase BEFORE navigation happens.
+    const overlayLink = target.closest ? target.closest('a[target="_blank"], a[target="_new"]') : null;
+    if (overlayLink && overlayLink.href && !overlayLink.href.startsWith('javascript:')) {
+      try {
+        const linkHost = new URL(overlayLink.href).hostname;
+        const pageHost = location.hostname;
+        // Only inspect cross-domain links (same-domain _blank links are usually legit)
+        if (linkHost !== pageHost && !pageHost.endsWith('.' + linkHost) && !linkHost.endsWith('.' + pageHost)) {
+          const style = window.getComputedStyle(overlayLink);
+          const pos = style.position;
+          const opacity = parseFloat(style.opacity);
+          const zIndex = parseInt(style.zIndex, 10);
+          const w = overlayLink.offsetWidth || 0;
+          const h = overlayLink.offsetHeight || 0;
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+
+          const isPositioned = pos === 'fixed' || pos === 'absolute';
+          const isHighZ = !isNaN(zIndex) && zIndex > 50;
+          const isLargeOverlay = w > vw * 0.3 && h > vh * 0.3;
+          const isTransparent = opacity < 0.3 || style.visibility === 'hidden' ||
+            style.backgroundColor === 'transparent' || style.backgroundColor === 'rgba(0, 0, 0, 0)';
+          const hasNoVisibleContent = !(overlayLink.innerText || '').trim() ||
+            style.fontSize === '0px' || style.color === 'transparent';
+
+          // Block if: positioned overlay (fixed/absolute) that is either transparent,
+          // covers a large area, or has no visible text — dead giveaway of a popup overlay
+          if (isPositioned && (isHighZ || isLargeOverlay) && (isTransparent || hasNoVisibleContent)) {
+            if (!isNearVideoPlayer(overlayLink)) {
+              console.warn('[AdBlocker] Blocked transparent overlay link to:', overlayLink.href);
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              overlayLink.remove();
+              queueStat('popupsBlocked', 1);
+              return;
+            }
+          }
+        }
+      } catch (err) {}
+    }
+
+    // ── EXISTING: class/id and computed-style overlay checks ─────────────────
     let current = target;
     let depth = 0;
 
@@ -154,7 +201,7 @@
 
         if (isPositioned && (isHighZ || coversScreen) && isTransparent && hasNoText) {
           // Don't remove if this is part of a video player
-          if (isNearVideoPlayer(current)) continue;
+          if (isNearVideoPlayer(current)) { current = current.parentElement; depth++; continue; }
 
           e.preventDefault();
           e.stopPropagation();
@@ -177,13 +224,23 @@
   // ============================================================================
   // 2. PROACTIVE OVERLAY SCANNER — runs on page load + mutations
   // Finds and removes invisible overlays BEFORE user clicks
+  // FIXED: now only scans a given root's subtree (default: whole doc, but only
+  // on first run) instead of re-querying the ENTIRE document every mutation.
+  // Re-scanning the whole DOM on every mutation is what caused "page not
+  // responding" on sites with heavy/dynamic content.
   // ============================================================================
-  function purgeInvisibleOverlays() {
-    const allEls = document.querySelectorAll('div, span, section, ins, aside, a');
+  function purgeInvisibleOverlays(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const allEls = scope.querySelectorAll('div, span, section, ins, aside, a');
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    for (let i = 0; i < allEls.length; i++) {
+    // Hard cap per call so a single huge subtree can never block the main
+    // thread for long — remaining elements get picked up on the next pass.
+    const MAX_SCAN = 1500;
+    const limit = Math.min(allEls.length, MAX_SCAN);
+
+    for (let i = 0; i < limit; i++) {
       const node = allEls[i];
       if (node._adChecked) continue;
       node._adChecked = true;
@@ -207,7 +264,6 @@
         const hasNoMedia = node.querySelectorAll('input, select, textarea, video, iframe, embed, object').length === 0;
 
         if (isTransparent && hasNoText && hasNoMedia) {
-          // Don't remove if this node is part of a video player
           if (isNearVideoPlayer(node)) continue;
 
           console.warn('[AdBlocker] Purged invisible clickjack overlay:', node.tagName, node.className);
@@ -480,8 +536,16 @@
   function handleFacebookSponsored(node) {
     if (!isFacebook) return;
 
-    // Find feed post containers
-    const postSelectors = 'div[data-pagelet*="FeedUnit"], div[role="feed"] > div, div[data-pagelet*="feed"] > div';
+    // Widened selectors: feed posts, sidebar cards, marketplace items, articles
+    const postSelectors = [
+      'div[data-pagelet*="FeedUnit"]',
+      'div[role="feed"] > div',
+      'div[data-pagelet*="feed"] > div',
+      'div[role="article"]',
+      'div[role="complementary"] div[role="article"]',
+      'div[aria-posinset]'
+    ].join(', ');
+
     const posts = (node.nodeType === 1 && node.matches && node.matches(postSelectors))
       ? [node]
       : (node.querySelectorAll ? node.querySelectorAll(postSelectors) : []);
@@ -492,6 +556,47 @@
         queueStat('fbSponsoredRemoved', 1);
       }
     });
+
+    // Fallback: find any element whose text is exactly "Sponsored" or "Promoted",
+    // then walk up to the nearest card-sized ancestor and hide it. This catches
+    // sponsored cards regardless of which container FB wraps them in.
+    fallbackSponsoredScan(node);
+  }
+
+  // Text-based fallback for Facebook sponsored content — durable against
+  // FB DOM restructures because it doesn't depend on specific container selectors.
+  function fallbackSponsoredScan(root) {
+    if (!root || !root.querySelectorAll) return;
+
+    const candidates = root.querySelectorAll('span, a');
+    for (let i = 0; i < candidates.length; i++) {
+      const el = candidates[i];
+      const text = (el.textContent || '').trim();
+      if (text !== 'Sponsored' && text !== 'Promoted') continue;
+
+      // Also check assembled split-letter spans (S-p-o-n-s-o-r-e-d)
+      // The isFacebookSponsored method already handles this in detail, but
+      // here we do a quick parent walk as a second line of defence.
+
+      // Walk up to the nearest card-sized ancestor (80–1200px tall)
+      let ancestor = el.parentElement;
+      let depth = 0;
+      while (ancestor && ancestor !== document.body && depth < 15) {
+        if (ancestor.dataset && ancestor.dataset.fbAdChecked === 'fallback') break;
+
+        const h = ancestor.offsetHeight || 0;
+        const w = ancestor.offsetWidth || 0;
+        if (h >= 80 && h <= 1200 && w >= 200) {
+          // Looks like a card — hide it
+          if (ancestor.dataset) ancestor.dataset.fbAdChecked = 'fallback';
+          ancestor.style.display = 'none';
+          queueStat('fbSponsoredRemoved', 1);
+          break;
+        }
+        ancestor = ancestor.parentElement;
+        depth++;
+      }
+    }
   }
 
   // Full-page Facebook scan (for posts loaded via infinite scroll)
@@ -499,7 +604,8 @@
     if (!isFacebook) return;
 
     const feedPosts = document.querySelectorAll(
-      'div[data-pagelet*="FeedUnit"], div[role="feed"] > div, div[data-pagelet*="feed"] > div'
+      'div[data-pagelet*="FeedUnit"], div[role="feed"] > div, div[data-pagelet*="feed"] > div, ' +
+      'div[role="article"], div[role="complementary"] div[role="article"], div[aria-posinset]'
     );
 
     feedPosts.forEach(post => {
@@ -508,6 +614,9 @@
         queueStat('fbSponsoredRemoved', 1);
       }
     });
+
+    // Also run the fallback on the full page
+    fallbackSponsoredScan(document.body);
   }
 
   // ============================================================================
@@ -523,14 +632,14 @@
 
     if (isYouTube) handleYouTubeAds();
 
-    // Run overlay purge on non-safe streaming sites
-    if (!isOnSafeSite) {
-      purgeInvisibleOverlays();
-    }
-
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
       if (node.nodeType !== 1) continue;
+
+      // Run overlay purge scoped to each new subtree (not the whole document)
+      if (!isOnSafeSite) {
+        purgeInvisibleOverlays(node);
+      }
 
       if (isFacebook) handleFacebookSponsored(node);
 
@@ -561,7 +670,7 @@
   function init() {
     // Initial purge of any overlays already on the page (skip on safe sites)
     if (!isOnSafeSite) {
-      purgeInvisibleOverlays();
+      purgeInvisibleOverlays(document);
     }
 
     // Also scan body children for floating ad cards
@@ -580,8 +689,8 @@
 
     // Re-run overlay purge a few seconds after load (some ads inject late)
     if (!isOnSafeSite) {
-      setTimeout(purgeInvisibleOverlays, 2000);
-      setTimeout(purgeInvisibleOverlays, 5000);
+      setTimeout(() => purgeInvisibleOverlays(document), 2000);
+      setTimeout(() => purgeInvisibleOverlays(document), 5000);
     }
 
     // YouTube: dedicated interval for reliable ad skipping

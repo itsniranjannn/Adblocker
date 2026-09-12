@@ -15,7 +15,18 @@
     'onclick', 'bet365', 'spin', 'jackpot', 'syndication',
     'clickadu', 'yllix', 'trafficstars', 'adpogo', 'ad-delivery',
     'trafficjunky', 'traffichunt', 'cpmstar', 'revenuehits', 'bidvertiser',
-    'admaven', 'richpush', 'megapush', 'pushame', 'pushground'
+    'admaven', 'richpush', 'megapush', 'pushame', 'pushground',
+    'popmyads', 'adnium', 'adskeeper', 'mgid', 'smartyads', 'clickaine',
+    'poponclick', 'zeropark', 'evadav', 'galaksion', 'adprovider',
+    'onclickmega', 'ero-advertising', 'plugrush', 'bongacash', 'clicksor',
+    'popup.win', 'poplinks', 'shrink-service', 'linkvertise', 'adfoc.us',
+    'ouo.io', 'shorte.st', 'exe.io', 'droplink', 'clk.sh', 'gplinks',
+    'earn2short', 'links.wtf', 'megaline', 'v-ads', 'go2cloud',
+    'push.house', 'notifyme.top', 'adk2', 'adotmob', 'displayx',
+    'ad-mediaflow', 'macan-native', 'payout=0.', '/ads/redirect',
+    // Common piracy-site popup redirect domains
+    '2osb.com', 'remoby', 'adfox', 'adsspyglass', 'rofrede',
+    'clickdealer', 'smartadserver', 'revcontent'
   ];
 
   function isAdUrl(url) {
@@ -25,11 +36,19 @@
   }
 
   // ============================================================================
-  // MOCK WINDOW PROXY - absorbs popunder location assignments
-  // Sites do: var w = window.open('about:blank'); w.location = 'ad-url';
-  // We return a fake window object that swallows all those writes.
+  // SAFE MOCK WINDOW — the correct middle ground.
+  // - closed: false forever (old bug) => busy-wait loops (`while(!win.closed){}`)
+  //   spin forever => frozen tab.
+  // - null (previous attempted fix) => `win.document.write(...)` or
+  //   `win.location = url` on a null throws an uncaught TypeError, which can
+  //   abort the rest of that script — including unrelated code (like video
+  //   player init) bundled in the same file — and can even let a popup
+  //   through if it interrupts our own blocking logic mid-way.
+  // - This mock: closed is TRUE from the very first read, so any busy-wait
+  //   exits immediately, and every property/method access is a safe no-op
+  //   via Proxy, so nothing the site does to it can throw.
   // ============================================================================
-  function createMockWindow(blockedUrl) {
+  function createMockWindow() {
     const loc = {
       replace: function () {},
       assign: function () {},
@@ -38,39 +57,45 @@
       toString: function () { return 'about:blank'; }
     };
 
-    const mock = {
-      closed: false,
+    const doc = {
+      write: function () {},
+      writeln: function () {},
+      close: function () {},
+      open: function () { return doc; },
+      body: null,
       location: loc,
+      addEventListener: function () {},
+      removeEventListener: function () {}
+    };
+
+    const mock = {
+      closed: true, // TRUE immediately — busy-wait loops exit on first check
+      location: loc,
+      document: doc,
+      opener: null,
+      name: '',
       focus: function () {},
       blur: function () {},
-      close: function () { this.closed = true; },
+      close: function () {},
       postMessage: function () {},
       stop: function () {},
       moveTo: function () {},
       resizeTo: function () {},
-      document: {
-        write: function () {},
-        writeln: function () {},
-        close: function () {},
-        open: function () {},
-        body: null,
-        location: loc
-      }
+      addEventListener: function () {},
+      removeEventListener: function () {}
     };
 
-    // Proxy to catch any property set (especially location = 'url')
     try {
       return new Proxy(mock, {
         get(target, prop) {
-          if (prop === 'location') return loc;
           if (prop in target) return target[prop];
-          return function () {};
+          // Unknown property/method the site tries to call — return a
+          // harmless no-op function rather than undefined, so
+          // `win.someAdSdkMethod()` doesn't throw "is not a function".
+          return function () { return undefined; };
         },
-        set(target, prop, value) {
-          if (prop === 'location' || prop === 'href') {
-            console.warn('[AdBlocker] Trapped popunder location assignment:', value);
-            window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: String(value) }, '*');
-          }
+        set() {
+          // Silently swallow all writes (e.g. win.location = 'adurl')
           return true;
         }
       });
@@ -84,6 +109,11 @@
   // ============================================================================
   const originalOpen = window.open;
 
+  // Track popup timing to enforce one-popup-per-click — legitimate sites never
+  // need to open two popups from one user action, but piracy sites piggyback
+  // extra window.open calls on every click/mouseup/pointerup.
+  let lastAllowedPopupTime = 0;
+
   function interceptedOpen(url, target, features) {
     const strUrl = typeof url === 'string' ? url : (url ? String(url) : '');
     const event = window.event;
@@ -92,7 +122,7 @@
     if (isAdUrl(strUrl)) {
       console.warn('[AdBlocker] Blocked window.open to ad URL:', strUrl);
       window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl }, '*');
-      return createMockWindow(strUrl);
+      return createMockWindow();
     }
 
     // B. Triggered during a click/mouse/touch event
@@ -103,16 +133,18 @@
       if (!event.isTrusted) {
         console.warn('[AdBlocker] Blocked synthetic click window.open:', strUrl);
         window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl }, '*');
-        return createMockWindow(strUrl);
+        return createMockWindow();
       }
 
       // B2. Check if the user actually clicked on a real visible <a> link
       let isGenuineLink = false;
+      let clickedLinkEl = null;
       let el = targetEl;
       let depth = 0;
-      while (el && el !== document.body && depth < 5) {
+      while (el && el !== document.body && depth < 8) {
         if (el.tagName === 'A' && el.href && el.offsetWidth > 0 && el.offsetHeight > 0 && !el.href.startsWith('javascript:')) {
           isGenuineLink = true;
+          clickedLinkEl = el;
           break;
         }
         // Also allow buttons inside links, form submits, etc.
@@ -121,6 +153,7 @@
           const parentLink = el.closest('a[href]');
           if (parentLink && parentLink.offsetWidth > 0) {
             isGenuineLink = true;
+            clickedLinkEl = parentLink;
           }
           break;
         }
@@ -132,22 +165,53 @@
       if (!isGenuineLink) {
         console.warn('[AdBlocker] Blocked clickjack popunder (click on non-link element):', strUrl || 'about:blank', 'clicked:', targetEl?.tagName);
         window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl || 'about:blank' }, '*');
-        return createMockWindow(strUrl);
+        return createMockWindow();
       }
 
       // If about:blank or empty URL opened from a link click, it's likely a popunder trick
       if (!strUrl || strUrl === 'about:blank' || strUrl === '') {
         console.warn('[AdBlocker] Blocked blank window.open (popunder setup):', strUrl);
         window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: 'about:blank' }, '*');
-        return createMockWindow(strUrl);
+        return createMockWindow();
       }
+
+      // B3. PIGGYBACK POPUNDER DETECTION — the #1 piracy site technique.
+      // When the user clicks a genuine <a> link, the BROWSER already navigates
+      // to that link's href. An EXTRA window.open() to a DIFFERENT domain during
+      // the same click is a piggyback popunder riding the trusted user action.
+      if (clickedLinkEl) {
+        try {
+          const openHost = new URL(strUrl, location.href).hostname;
+          const linkHost = new URL(clickedLinkEl.href, location.href).hostname;
+          const pageHost = location.hostname;
+          // Popup goes to a domain that is NEITHER the clicked link's domain
+          // NOR the current page — third-party popup → ad
+          if (openHost !== linkHost && openHost !== pageHost) {
+            console.warn('[AdBlocker] Blocked cross-domain piggyback popup:', strUrl, '(clicked link goes to:', clickedLinkEl.href, ')');
+            window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl }, '*');
+            return createMockWindow();
+          }
+        } catch (e) {}
+      }
+
+      // B4. ONE POPUP PER USER ACTION — piracy sites register click handlers on
+      // click + mouseup + pointerup that each call window.open(). Legitimate
+      // sites never open two popups from one gesture. Block any window.open
+      // within 100ms of a previously allowed one.
+      const now = Date.now();
+      if (now - lastAllowedPopupTime < 100) {
+        console.warn('[AdBlocker] Blocked duplicate popup from same user action:', strUrl);
+        window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl }, '*');
+        return createMockWindow();
+      }
+      lastAllowedPopupTime = now;
     }
 
     // C. No event context but opening about:blank (script-initiated popunder setup)
     if (!event && (!strUrl || strUrl === 'about:blank')) {
       console.warn('[AdBlocker] Blocked script-initiated blank window.open');
       window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: 'about:blank' }, '*');
-      return createMockWindow(strUrl);
+      return createMockWindow();
     }
 
     // Passed all checks — allow the window.open

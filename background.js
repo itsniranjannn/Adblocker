@@ -8,17 +8,23 @@ const AD_REDIRECT_KEYWORDS = [
   'redirect', 'vortex', 'bet365', 'spin', 'jackpot',
   'syndication', 'clickadu', 'yllix', 'trafficstars', 'adpogo', 'ad-delivery',
   'trafficjunky', 'traffichunt', 'cpmstar', 'revenuehits', 'bidvertiser',
-  'admaven', 'richpush', 'megapush', 'pushame', 'pushground'
+  'admaven', 'richpush', 'megapush', 'pushame', 'pushground',
+  // Additional redirect/popup ad networks and link-shorteners abused for ads
+  'popmyads', 'adnium', 'adskeeper', 'mgid', 'smartyads', 'clickaine',
+  'popcash', 'poponclick', 'zeropark', 'evadav', 'galaksion', 'adprovider',
+  'onclickmega', 'ero-advertising', 'plugrush', 'bongacash', 'clicksor',
+  'popup.win', 'poplinks', 'shrink-service', 'linkvertise', 'adfoc.us',
+  'ouo.io', 'shorte.st', 'exe.io', 'droplink', 'clk.sh', 'gplinks',
+  'earn2short', 'links.wtf', 'megaline', 'v-ads', 'go2cloud', 'affde',
+  'affbank', 'offerforge', 'apilayer.click', 'push.house', 'notifyme.top',
+  'adk2', 'adotmob', 'displayx', 'ad-mediaflow',
+  // Seen in the wild: fake-play-button redirect networks
+  'macan-native', 'payout=0.', '/ads/redirect',
+  // Common piracy-site popup redirect domains
+  '2osb.com', 'remoby', 'adfox', 'adsspyglass', 'rofrede',
+  'clickdealer', 'smartadserver', 'revcontent'
 ];
 
-// High-risk domains where popunders are common
-const HIGH_RISK_DOMAINS = [
-  'movie', 'sports', 'stream', 'full4movies', 'india4movies', 'cinevo',
-  'watch', 'torrent', 'download', 'anime', 'manga',
-  'hdhub4u', 'hubstream', 'hdbay', 'hubdrive', 'moviesdrive', 'vegamovies',
-  'filmyzilla', 'tamilrockers', 'movierulz', 'bollyflix', 'extramovies',
-  'mp4moviez', 'filmymeet', 'worldfree4u', 'sdmoviespoint', 'themoviesflix'
-];
 
 // Initialize storage
 chrome.runtime.onInstalled.addListener(() => {
@@ -54,8 +60,6 @@ function incrementStat(key, count = 1) {
   });
 }
 
-// Track which tabs had user-initiated link clicks (to distinguish real navigation from popunders)
-const userNavigationTabs = new Set();
 
 // 1. Listen for declarativeNetRequest blocked network requests
 if (chrome.declarativeNetRequest && chrome.declarativeNetRequest.onRuleMatchedDebug) {
@@ -85,7 +89,17 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   });
 });
 
-// 3. AGGRESSIVE POPUNDER TAB DETECTION & CLOSURE
+// 3. POPUNDER TAB DETECTION & CLOSURE
+//
+// NOTE: We only close tabs that match a KNOWN ad-redirect keyword. We removed
+// the old "different domain / blank tab opened from a high-risk site" guess —
+// that heuristic also caught genuine tabs YOU open (ctrl/middle-click on a
+// streaming site frequently opens a different-domain video source, or a
+// blank tab that fills in a moment later) and was closing them, which is
+// exactly the false-positive this rewrite fixes. The real popunder defense
+// lives in content_main.js (blocks untrusted/synthetic window.open calls at
+// the page level, where we can actually tell a real click from a fake one) —
+// this background-script check is just a backstop for confirmed ad URLs.
 chrome.tabs.onCreated.addListener((tab) => {
   chrome.storage.local.get(['settings'], (res) => {
     const settings = res.settings || { blockPopups: true };
@@ -95,7 +109,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 
     const pendingUrl = (tab.pendingUrl || tab.url || '').toLowerCase();
 
-    // A. Known ad URL in the new tab — close immediately
+    // Known ad URL in the new tab — close immediately, regardless of active state
     const isAdPopunder = AD_REDIRECT_KEYWORDS.some(kw => pendingUrl.includes(kw));
     if (isAdPopunder) {
       chrome.tabs.remove(tab.id, () => {
@@ -105,63 +119,50 @@ chrome.tabs.onCreated.addListener((tab) => {
       return;
     }
 
-    // B. Tab opened in background (not active) — classic popunder
-    if (!tab.active) {
-      chrome.tabs.remove(tab.id, () => {
-        if (chrome.runtime.lastError) return;
-        incrementStat('popupsBlocked');
-      });
-      return;
-    }
-
-    // C. Tab opened from a high-risk streaming/movie site going to a different domain
-    chrome.tabs.get(tab.openerTabId, (openerTab) => {
-      if (chrome.runtime.lastError || !openerTab) return;
-      const openerUrl = (openerTab.url || '').toLowerCase();
-      const isFromHighRiskSite = HIGH_RISK_DOMAINS.some(kw => openerUrl.includes(kw));
-
-      if (isFromHighRiskSite) {
-        try {
-          const openerHost = new URL(openerTab.url).hostname;
-          const tabUrl = tab.pendingUrl || tab.url || '';
-          
-          // If no URL yet (about:blank setup) or going to a different domain
-          if (!tabUrl || tabUrl === 'about:blank' || tabUrl === 'chrome://newtab/') {
-            // Wait briefly to see if it navigates to an ad
-            setTimeout(() => {
-              chrome.tabs.get(tab.id, (updatedTab) => {
-                if (chrome.runtime.lastError) return;
-                const finalUrl = (updatedTab.url || updatedTab.pendingUrl || '').toLowerCase();
-                if (!finalUrl || finalUrl === 'about:blank' || !finalUrl.includes(openerHost)) {
-                  chrome.tabs.remove(tab.id, () => {
-                    if (chrome.runtime.lastError) return;
-                    incrementStat('popupsBlocked');
-                  });
-                }
-              });
-            }, 500);
-          } else {
-            const tabHost = new URL(tabUrl).hostname;
-            if (tabHost !== openerHost && !tabHost.endsWith('.' + openerHost)) {
-              chrome.tabs.remove(tab.id, () => {
-                if (chrome.runtime.lastError) return;
-                incrementStat('popupsBlocked');
-              });
-            }
+    // If the tab has no URL yet (about:blank), give it a moment to resolve,
+    // then close it ONLY if it resolved to a known ad keyword. This still
+    // catches the classic "open about:blank, then redirect via location=" trick
+    // without touching legitimate blank-then-load tabs.
+    if (!pendingUrl || pendingUrl === 'about:blank') {
+      setTimeout(() => {
+        chrome.tabs.get(tab.id, (updatedTab) => {
+          if (chrome.runtime.lastError || !updatedTab) return;
+          const finalUrl = (updatedTab.url || updatedTab.pendingUrl || '').toLowerCase();
+          const resolvedToAd = AD_REDIRECT_KEYWORDS.some(kw => finalUrl.includes(kw));
+          if (resolvedToAd) {
+            chrome.tabs.remove(tab.id, () => {
+              if (chrome.runtime.lastError) return;
+              incrementStat('popupsBlocked');
+            });
           }
-        } catch (e) {
-          // URL parsing failed — probably a weird ad URL, close it
-          chrome.tabs.remove(tab.id, () => {
-            if (chrome.runtime.lastError) return;
-            incrementStat('popupsBlocked');
-          });
-        }
-      }
-    });
+        });
+      }, 700);
+    }
   });
 });
 
-// 4. Message handler from content scripts
+// 4. AUTO-CLOSE POPUP TABS BLOCKED BY EXTENSION RULES
+// When declarativeNetRequest (rules.json) blocks a page load, the tab shows
+// "This page has been blocked by an extension" but STAYS OPEN — the user has
+// to manually close it. Detect this and auto-close popup tabs.
+chrome.webNavigation.onErrorOccurred.addListener((details) => {
+  if (details.frameId !== 0) return; // Only main frame
+  if (details.error !== 'net::ERR_BLOCKED_BY_CLIENT') return;
+
+  chrome.tabs.get(details.tabId, (tab) => {
+    if (chrome.runtime.lastError) return;
+    // Only auto-close if this tab was opened by another tab (it's a popup),
+    // not if the user navigated here directly
+    if (tab.openerTabId) {
+      chrome.tabs.remove(details.tabId, () => {
+        if (chrome.runtime.lastError) return;
+        incrementStat('popupsBlocked');
+      });
+    }
+  });
+});
+
+// 5. Message handler from content scripts
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'INCREMENT_STAT') {
     incrementStat(message.key, message.count || 1);
