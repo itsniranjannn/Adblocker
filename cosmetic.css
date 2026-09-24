@@ -127,6 +127,27 @@ tp-yt-paper-dialog.ytd-mealbar-promo-renderer,
 ytd-companion-slot-renderer,
 ytd-player-legacy-desktop-watch-ads-renderer,
 
+/* 3b. YouTube In-Player Ad Overlay — instant CSS hide (before JS can react).
+   Uses opacity:0 instead of display:none so JS can still .click() the skip
+   button programmatically. The JS handler restores these after the ad ends. */
+.html5-video-player.ad-showing .ytp-ad-player-overlay,
+.html5-video-player.ad-showing .ytp-ad-player-overlay-layout,
+.html5-video-player.ad-showing .ytp-ad-text,
+.html5-video-player.ad-showing .ytp-ad-preview-container,
+.html5-video-player.ad-showing .ytp-ad-skip-button-container,
+.html5-video-player.ad-showing .ytp-ad-skip-button-slot,
+.html5-video-player.ad-showing .ytp-ad-player-overlay-instream-info,
+.html5-video-player.ad-showing .ytp-ad-visit-advertiser-button,
+.html5-video-player.ad-interrupting .ytp-ad-player-overlay,
+.html5-video-player.ad-interrupting .ytp-ad-player-overlay-layout,
+.html5-video-player.ad-interrupting .ytp-ad-text,
+.html5-video-player.ad-interrupting .ytp-ad-preview-container,
+.html5-video-player.ad-interrupting .ytp-ad-skip-button-container,
+.html5-video-player.ad-interrupting .ytp-ad-skip-button-slot {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* 4. Facebook Sponsored Selectors */
 [data-pagelet*="Sponsored"],
 div[aria-label="Sponsored"],

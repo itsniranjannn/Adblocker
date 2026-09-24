@@ -401,17 +401,36 @@
     '.ytp-ad-preview-container'
   ];
 
-  // All known YouTube skip button selectors
+  // All known YouTube skip button selectors (2024–2026)
   const YT_SKIP_SELECTORS = [
+    // Classic skip buttons
     '.ytp-ad-skip-button',
     '.ytp-ad-skip-button-modern',
     '.ytp-skip-ad-button',
-    '.ytp-ad-skip-button-container button',
+    'button.ytp-ad-skip-button',
     'button.ytp-ad-skip-button-modern',
-    '.ytp-ad-overlay-close-button',
+    // Skip button inside containers
+    '.ytp-ad-skip-button-container button',
     '.ytp-ad-skip-button-slot button',
+    '.ytp-ad-skip-button-slot .ytp-ad-skip-button-modern',
     '[class*="ytp-ad-skip"] button',
-    '.ytp-ad-survey-answer-button'
+    // Overlay close / dismiss
+    '.ytp-ad-overlay-close-button',
+    '.ytp-ad-overlay-close-container button',
+    // Survey / feedback dismiss
+    '.ytp-ad-survey-answer-button',
+    '.ytp-ad-feedback-dialog-close-button',
+    // Newer renderer-based skip (2025+)
+    'ytd-button-renderer.ytp-ad-skip-button',
+    '.ytp-ad-skip-button-icon-container',
+    // Generic: any ytp-button inside an ad skip region
+    '.ytp-ad-skip-button-slot .ytp-button',
+    '.ytp-ad-skip-button-container .ytp-button',
+    // "Skip Ad" / "Skip Ads" text-based (catches custom renderers)
+    'button[aria-label="Skip Ad"]',
+    'button[aria-label="Skip Ads"]',
+    'button[aria-label="Skip ad"]',
+    'button[aria-label="Skip ads"]'
   ];
 
   // Elements to remove outright
@@ -433,42 +452,90 @@
     '.ytp-ad-action-interstitial'
   ];
 
+  // Track whether we muted/sped-up due to an ad (vs user preference)
+  let adWasActive = false;
+
   function handleYouTubeAds() {
     if (!isYouTube) return;
 
-    // 1. Skip/fast-forward video ads
-    const adShowing = document.querySelector(YT_AD_INDICATORS.join(', '));
+    // 1. Detect ad — check player class (most reliable) + indicator selectors
+    const player = document.querySelector('.html5-video-player');
+    const isAdActive = (player && (
+      player.classList.contains('ad-showing') ||
+      player.classList.contains('ad-interrupting')
+    )) || !!document.querySelector(YT_AD_INDICATORS.join(', '));
+
     const video = document.querySelector('video');
 
-    if (adShowing && video) {
-      // Mute the ad
-      video.muted = true;
+    if (isAdActive && video) {
+      adWasActive = true;
 
-      // Speed up to maximum
+      // Mute & speed through the ad
+      video.muted = true;
       try { video.playbackRate = 16.0; } catch (e) {}
 
-      // Seek to end of ad
+      // Seek to end so the "Skip" button appears immediately
       if (isFinite(video.duration) && video.duration > 0) {
-        video.currentTime = video.duration - 0.1;
+        video.currentTime = video.duration - 0.01;
       }
 
-      // Click any available skip button
-      const skipBtn = document.querySelector(YT_SKIP_SELECTORS.join(', '));
-      if (skipBtn) {
-        try {
-          skipBtn.click();
-          queueStat('ytAdsSkipped', 1);
-        } catch (e) {}
+      // 2. Click ALL matching skip/dismiss buttons (not just the first)
+      let clicked = false;
+      const skipBtns = document.querySelectorAll(YT_SKIP_SELECTORS.join(', '));
+      for (let i = 0; i < skipBtns.length; i++) {
+        try { skipBtns[i].click(); clicked = true; } catch (e) {}
       }
+
+      // 3. Text-based fallback — find any button whose visible text says "Skip"
+      if (!clicked) {
+        const allBtns = document.querySelectorAll(
+          '.ytp-ad-module button, .ytp-ad-skip-button-slot *, ' +
+          '.ytp-ad-skip-button-container *, .video-ads button, ' +
+          'button[class*="ytp-ad"]'
+        );
+        for (let i = 0; i < allBtns.length; i++) {
+          const txt = (allBtns[i].textContent || '').trim().toLowerCase();
+          if (txt.includes('skip')) {
+            try { allBtns[i].click(); clicked = true; } catch (e) {}
+          }
+        }
+      }
+
+      // 4. Hide the ad overlay UI so the user never sees the ad flash
+      const adOverlays = document.querySelectorAll(
+        '.ytp-ad-player-overlay, .ytp-ad-player-overlay-layout, ' +
+        '.ytp-ad-text, .ytp-ad-preview-container, ' +
+        '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot, ' +
+        '.ytp-ad-player-overlay-instream-info'
+      );
+      for (let i = 0; i < adOverlays.length; i++) {
+        adOverlays[i].style.setProperty('opacity', '0', 'important');
+        adOverlays[i].style.setProperty('pointer-events', 'none', 'important');
+      }
+
+      if (clicked) queueStat('ytAdsSkipped', 1);
     }
 
-    // 2. Restore playback rate and unmute after ad ends
-    if (!adShowing && video && video.muted && video.playbackRate > 2) {
+    // 5. Restore playback after ad ends
+    if (!isAdActive && adWasActive && video) {
+      adWasActive = false;
       video.muted = false;
       video.playbackRate = 1.0;
+
+      // Restore visibility on ad overlay containers
+      const adOverlays = document.querySelectorAll(
+        '.ytp-ad-player-overlay, .ytp-ad-player-overlay-layout, ' +
+        '.ytp-ad-text, .ytp-ad-preview-container, ' +
+        '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot, ' +
+        '.ytp-ad-player-overlay-instream-info'
+      );
+      for (let i = 0; i < adOverlays.length; i++) {
+        adOverlays[i].style.removeProperty('opacity');
+        adOverlays[i].style.removeProperty('pointer-events');
+      }
     }
 
-    // 3. Remove ad overlay/companion elements from the page
+    // 6. Remove ad companion/banner elements from the page
     const adElements = document.querySelectorAll(YT_AD_REMOVE_SELECTORS.join(', '));
     for (let i = 0; i < adElements.length; i++) {
       adElements[i].remove();
@@ -693,10 +760,28 @@
       setTimeout(() => purgeInvisibleOverlays(document), 5000);
     }
 
-    // YouTube: dedicated interval for reliable ad skipping
+    // YouTube: fast polling (100ms) + MutationObserver for instant ad detection
     if (isYouTube) {
       handleYouTubeAds();
-      setInterval(handleYouTubeAds, 500);
+      setInterval(handleYouTubeAds, 100);
+
+      // Also watch the player element's class list for 'ad-showing' changes.
+      // This fires the INSTANT an ad begins — faster than any interval.
+      const watchPlayer = () => {
+        const player = document.querySelector('.html5-video-player');
+        if (!player) { setTimeout(watchPlayer, 500); return; }
+
+        const playerObserver = new MutationObserver(() => {
+          if (player.classList.contains('ad-showing') ||
+              player.classList.contains('ad-interrupting')) {
+            handleYouTubeAds();
+            setTimeout(handleYouTubeAds, 50);
+            setTimeout(handleYouTubeAds, 150);
+          }
+        });
+        playerObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
+      };
+      watchPlayer();
     }
 
     // Facebook: periodic scan for sponsored posts (infinite scroll loads new ones)
