@@ -36,29 +36,6 @@
   }
 
   // ============================================================================
-  // SAFE-SITE LIST — skip aggressive heuristic popup checks on major sites.
-  // These sites use <div>, <svg>, <span>, <path> elements as clickable buttons
-  // and legitimately call window.open() from non-<a> click handlers (e.g.
-  // Facebook Messenger calls, share dialogs, YouTube popouts).
-  // Known ad URLs (section A) and synthetic events (section B1) are STILL
-  // blocked on these sites — only the heuristic guesses are relaxed.
-  // ============================================================================
-  const SAFE_SITES = [
-    'youtube.com', 'youtu.be', 'facebook.com', 'fb.com', 'messenger.com',
-    'google.com', 'twitter.com', 'x.com', 'instagram.com', 'reddit.com',
-    'linkedin.com', 'github.com', 'stackoverflow.com', 'wikipedia.org',
-    'amazon.com', 'netflix.com', 'twitch.tv', 'discord.com', 'whatsapp.com',
-    'tiktok.com', 'microsoft.com', 'apple.com', 'spotify.com', 'mail.google.com',
-    'zoom.us', 'notion.so', 'figma.com', 'slack.com', 'outlook.com',
-    'live.com', 'office.com', 'teams.microsoft.com'
-  ];
-
-  const currentHost = location.hostname.toLowerCase();
-  const isOnSafeSite = SAFE_SITES.some(domain =>
-    currentHost === domain || currentHost.endsWith('.' + domain)
-  );
-
-  // ============================================================================
   // SAFE MOCK WINDOW — the correct middle ground.
   // - closed: false forever (old bug) => busy-wait loops (`while(!win.closed){}`)
   //   spin forever => frozen tab.
@@ -141,7 +118,7 @@
     const strUrl = typeof url === 'string' ? url : (url ? String(url) : '');
     const event = window.event;
 
-    // A. Known ad URL — block immediately (ALWAYS, even on safe sites)
+    // A. Known ad URL — block immediately
     if (isAdUrl(strUrl)) {
       console.warn('[AdBlocker] Blocked window.open to ad URL:', strUrl);
       window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl }, '*');
@@ -152,7 +129,7 @@
     if (event && (event.type === 'click' || event.type === 'mouseup' || event.type === 'mousedown' || event.type === 'pointerup' || event.type === 'pointerdown' || event.type === 'touchend')) {
       const targetEl = event.target;
 
-      // B1. Untrusted (synthetic) event — always block (even on safe sites)
+      // B1. Untrusted (synthetic) event — always block
       if (!event.isTrusted) {
         console.warn('[AdBlocker] Blocked synthetic click window.open:', strUrl);
         window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl }, '*');
@@ -185,20 +162,14 @@
       }
 
       // If not clicking a genuine link, this is a clickjack popunder — BLOCK IT
-      // SKIP on safe sites: Facebook/YouTube etc. use <div>, <svg>, <path> as
-      // legitimate click targets that call window.open() (calls, share, etc.)
-      if (!isGenuineLink && !isOnSafeSite) {
-        const isInteractive = targetEl.closest && targetEl.closest('button, [role="button"], input[type="submit"], input[type="button"]');
-        if (!isInteractive) {
-          console.warn('[AdBlocker] Blocked clickjack popunder (click on non-link element):', strUrl || 'about:blank', 'clicked:', targetEl?.tagName);
-          window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl || 'about:blank' }, '*');
-          return createMockWindow();
-        }
+      if (!isGenuineLink) {
+        console.warn('[AdBlocker] Blocked clickjack popunder (click on non-link element):', strUrl || 'about:blank', 'clicked:', targetEl?.tagName);
+        window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: strUrl || 'about:blank' }, '*');
+        return createMockWindow();
       }
 
       // If about:blank or empty URL opened from a link click, it's likely a popunder trick
-      // SKIP on safe sites: Facebook opens about:blank for Messenger calls/popouts
-      if ((!strUrl || strUrl === 'about:blank' || strUrl === '') && !isOnSafeSite) {
+      if (!strUrl || strUrl === 'about:blank' || strUrl === '') {
         console.warn('[AdBlocker] Blocked blank window.open (popunder setup):', strUrl);
         window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: 'about:blank' }, '*');
         return createMockWindow();
@@ -208,8 +179,7 @@
       // When the user clicks a genuine <a> link, the BROWSER already navigates
       // to that link's href. An EXTRA window.open() to a DIFFERENT domain during
       // the same click is a piggyback popunder riding the trusted user action.
-      // SKIP on safe sites: Facebook opens Messenger, Instagram, etc. cross-domain.
-      if (clickedLinkEl && !isOnSafeSite) {
+      if (clickedLinkEl) {
         try {
           const openHost = new URL(strUrl, location.href).hostname;
           const linkHost = new URL(clickedLinkEl.href, location.href).hostname;
@@ -238,8 +208,7 @@
     }
 
     // C. No event context but opening about:blank (script-initiated popunder setup)
-    // SKIP on safe sites: Facebook uses script-initiated opens for Messenger calls etc.
-    if (!event && (!strUrl || strUrl === 'about:blank') && !isOnSafeSite) {
+    if (!event && (!strUrl || strUrl === 'about:blank')) {
       console.warn('[AdBlocker] Blocked script-initiated blank window.open');
       window.postMessage({ type: 'ADBLOCKER_POPUP_BLOCKED', url: 'about:blank' }, '*');
       return createMockWindow();
