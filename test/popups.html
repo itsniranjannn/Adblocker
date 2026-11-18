@@ -5,7 +5,13 @@
 <button id="cross">cross-origin open (should be blocked)</button>
 <a id="legit" href="/test/popups.html?legit" target="_blank">legit target=_blank same-site link (should open)</a>
 <a id="xlegit" href="https://example.org/" target="_blank">user link to other site (should open - user intent)</a>
+<button id="navbtn">button that navigates this tab to another site (must work)</button>
+<div id="card" style="cursor:pointer;border:1px solid #999;padding:8px;margin:6px 0">clickable card, opens other site (control, toast ok)</div>
 <script>
+document.getElementById('navbtn').onclick=()=>{ location.href='https://example.org/?fromnav'; };
+document.getElementById('card').addEventListener('click',()=>window.open('https://example.com/?card'));
+document.addEventListener('click',()=>{ if(window.__nav) location.href='https://ads.example.net/?tabhijack'; });
+
 // 1. popup on load, no user gesture
 window.open('https://example.com/?load');
 // 2. clickunder: any click anywhere opens an ad

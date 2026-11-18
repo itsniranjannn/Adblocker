@@ -99,13 +99,35 @@
       return;
     }
 
-    lastClick = { interactive: !!(t && t.closest && t.closest(INTERACTIVE) && !isHijackOverlay(t)) };
+    const control = !!t && !!t.closest && (!!t.closest(INTERACTIVE) || getComputedStyle(t).cursor === 'pointer');
+    lastClick = { interactive: control && !isHijackOverlay(t), at: performance.now() };
 
     // Real click, but on an invisible click-catching overlay that links out.
     if (a && a.target && a.target !== '_self' && isHijackOverlay(a)) {
       e.preventDefault(); e.stopImmediatePropagation(); report(a.href);
     }
   }, true);
+
+  // ---- current-tab hijack ---------------------------------------------------------
+  // "Clickunder" variant: a click on the page body makes a script send THIS tab to an ad.
+  // Only that exact pattern is blocked: script-started, cross-site, right after a real click
+  // that was not on a button/link. Logins, SSO redirects, timers and form posts are untouched.
+  if (window === window.top && window.navigation) {
+    navigation.addEventListener('navigate', e => {
+      try {
+        if (off() || !e.cancelable || e.userInitiated || e.hashChange || e.formData || e.downloadRequest != null) return;
+        if (e.navigationType !== 'push' && e.navigationType !== 'replace') return;
+        const to = parse(e.destination.url);
+        if (!to || (to.protocol !== 'http:' && to.protocol !== 'https:')) return;
+        if (sameSite(to.hostname) || OK_HOSTS.test(to.hostname) || userOk(to.hostname)) return;
+        if (!(navigator.userActivation && navigator.userActivation.isActive)) return;
+        // needs a genuine, recent click on a non-control; keyboard activation (Enter in a form) is left alone
+        if (!lastClick || lastClick.interactive || performance.now() - lastClick.at > 5000) return;
+        e.preventDefault();
+        report(to.href, false);
+      } catch (_) {}
+    });
+  }
 
   // ---- hidden forms that submit into a new tab -------------------------------
   const realSubmit = HTMLFormElement.prototype.submit;

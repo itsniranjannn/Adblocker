@@ -5,10 +5,10 @@
   "description": "Lightweight MV3 ad, popup and popunder blocker",
   "scripts": {
     "rules": "python build/update_lists.py",
-    "test": "node test/rules.test.js && node test/e2e.js && node test/zap.js && node test/toast.js",
+    "test": "node test/rules.test.js && node test/e2e.js && node test/zap.js && node test/toast.js && node test/hijack.js",
     "test:rules": "node test/rules.test.js",
     "test:e2e": "node test/e2e.js",
-    "test:zap": "node test/zap.js && node test/toast.js",
+    "test:zap": "node test/zap.js && node test/toast.js && node test/hijack.js",
     "test:sites": "node test/sites.js",
     "bench": "node test/bench.js"
   },

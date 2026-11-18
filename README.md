@@ -21,6 +21,7 @@ Lightweight Manifest V3 ad / popup / popunder blocker for Chrome, Edge and Brave
 - Cross-site targets are blocked, except sign-in, share and payment hosts in `OK_HOSTS`.
 - Script-made `<a target=_blank>.click()` and invisible full-page click-catching links are blocked.
 - A tab opened from another tab whose load gets blocked is closed automatically. Tabs you open yourself are never touched.
+- A click on the page background that tries to send *this* tab to another site (current-tab clickunder) is cancelled. Redirects after a click on a button/link/clickable card, redirects with no click (logins, SSO) and form posts are never touched. Limit: an ad script that fires on a click on a real button looks the same as a legitimate script, so it is allowed.
 - A legitimate popup got blocked? Open the icon, see it listed, press **Pause on this site**, or add its host to `OK_HOSTS`.
 
 ## Blocked a popup you wanted?
