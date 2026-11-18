@@ -5,8 +5,8 @@
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let host = '';
   try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch (_) {}
-  const local = await chrome.storage.local.get(['paused', 'allowed']);
-  const paused = local.paused || [], allowed = local.allowed || [];
+  const local = await chrome.storage.local.get(['paused', 'allowed', 'zaps']);
+  const paused = local.paused || [], allowed = local.allowed || [], zaps = local.zaps || {};
 
   async function render() {
     const log = $('log'); log.textContent = '';
@@ -34,6 +34,23 @@
       log.append(ul, el('div', 'Reload the page after allowing a domain.', 'mut'));
     }
 
+    const mine = Object.keys(zaps).filter(h => host === h || host.endsWith('.' + h));
+    const hidden = mine.flatMap(h => zaps[h].map(s => [h, s]));
+    if (hidden.length) {
+      log.append(el('h2', `Hidden on this site (${hidden.length})`));
+      const ul = el('ul');
+      for (const [h, s] of hidden) {
+        const li = el('li'); li.append(el('span', s, 'dom'));
+        const b = el('button', 'Show', 'sm');
+        b.onclick = async () => {
+          zaps[h] = zaps[h].filter(x => x !== s); if (!zaps[h].length) delete zaps[h];
+          await chrome.storage.local.set({ zaps }); chrome.tabs.reload(tab.id); li.remove();
+        };
+        li.append(b); ul.append(li);
+      }
+      log.append(ul);
+    }
+
     if (allowed.length) {
       log.append(el('h2', `Your allowed domains (${allowed.length})`));
       const ul = el('ul');
@@ -47,9 +64,9 @@
     }
   }
 
-  if (!/^[a-z0-9.-]+\.[a-z]+$/i.test(host)) {
+  if (!/^[a-z0-9.-]+$/i.test(host)) {
     $('host').textContent = 'This page can’t be filtered.';
-    $('toggle').remove(); $('diag').remove(); $('state').textContent = 'n/a';
+    $('toggle').remove(); $('diag').remove(); $('zap').remove(); $('state').textContent = 'n/a';
     return;
   }
   $('host').textContent = host;
@@ -58,6 +75,10 @@
   $('state').textContent = isOff ? 'Paused on this site' : 'Blocking on this site';
   $('toggle').textContent = isOff ? 'Resume blocking' : 'Pause on this site';
   $('toggle').onclick = async () => { await send({ t: 'toggle', host }); chrome.tabs.reload(tab.id); window.close(); };
+  $('zap').onclick = async () => {
+    try { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['zapper.js'] }); window.close(); }
+    catch (_) { $('zap').textContent = 'Cannot zap on this page'; $('zap').disabled = true; }
+  };
   $('diag').onclick = async () => {
     const ok = await send({ t: 'diag', tabId: tab.id });
     if (!ok) { $('diag').textContent = 'Diagnose needs an unpacked install'; $('diag').disabled = true; return; }
