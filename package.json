@@ -5,12 +5,15 @@
   "description": "Lightweight MV3 ad, popup and popunder blocker",
   "scripts": {
     "rules": "python build/update_lists.py",
-    "test": "node test/rules.test.js && node test/e2e.js && node test/zap.js && node test/toast.js && node test/hijack.js",
+    "test": "node test/rules.test.js && node test/e2e.js && node test/zap.js && node test/toast.js && node test/hijack.js && node test/popunder.js && node test/brand.js",
     "test:rules": "node test/rules.test.js",
     "test:e2e": "node test/e2e.js",
-    "test:zap": "node test/zap.js && node test/toast.js && node test/hijack.js",
+    "test:zap": "node test/zap.js && node test/toast.js && node test/hijack.js && node test/popunder.js && node test/brand.js",
     "test:sites": "node test/sites.js",
-    "bench": "node test/bench.js"
+    "bench": "node test/bench.js",
+    "probe": "node test/probe.js"
   },
-  "devDependencies": { "playwright-core": "^1.49.0" }
+  "devDependencies": {
+    "playwright-core": "^1.49.0"
+  }
 }

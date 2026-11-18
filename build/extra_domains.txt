@@ -1,0 +1,4 @@
+# Hand-added ad / popunder domains seen on real streaming sites (one per line).
+adsboosters.xyz
+big-bathroom.com
+violent-kiss.com

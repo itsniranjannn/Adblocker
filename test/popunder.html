@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>popunder techniques</title>
+<body style="font:16px sans-serif;padding:20px">
+<h3>Popunder techniques seen on streaming sites (reproduced locally)</h3>
+<p>Each one fires on the first mouse press, like the real ad scripts do.</p>
+<form id="legitform" action="/test/popunder.html" method="GET" target="_blank"><input type="hidden" name="legit" value="1"><button id="legitsubmit">visible form to the same site, new tab (must open)</button></form>
+<form id="xform" action="https://example.com/" method="GET" target="_blank"><input name="q" value="x"><button id="xsubmit">visible search form to another site, new tab (user submits: must open)</button></form>
+<script>
+window.__mode = '';
+// 1. hidden form, GET, target=_blank, submitted from script (the "auto-adblock" ad script trick)
+function hiddenForm(url){ const u=new URL(url); const f=document.createElement('form'); f.action=u.origin+u.pathname; f.method='GET'; f.target='_blank'; f.style.display='none';
+  u.searchParams.forEach((v,k)=>{const i=document.createElement('input');i.type='hidden';i.name=k;i.value=v;f.appendChild(i);}); document.body.appendChild(f); f.submit(); document.body.removeChild(f); }
+// 2. pristine window.open taken from a brand-new iframe, called on the real window
+function iframeOpen(url){ const f=document.createElement('iframe'); f.style.display='none'; document.body.appendChild(f);
+  const r=f.contentWindow.open.call(window,url,'_blank'); setTimeout(()=>f.remove(),1000); return r; }
+// 3. hidden form with requestSubmit (fires a submit event)
+function hiddenRequestSubmit(url){ const f=document.createElement('form'); f.action=url; f.target='_blank'; f.style.display='none'; const b=document.createElement('button'); f.appendChild(b); document.body.appendChild(f); f.requestSubmit(); f.remove(); }
+// 4. synthetic click on a submit button inside a hidden form
+function hiddenButtonClick(url){ const f=document.createElement('form'); f.action=url; f.target='_blank'; f.style.display='none'; const b=document.createElement('button'); b.type='submit'; f.appendChild(b); document.body.appendChild(f); b.click(); f.remove(); }
+window.addEventListener('mousedown', () => {
+  if (window.__mode==='form') hiddenForm('https://example.com/?trick=form');
+  if (window.__mode==='iframe') iframeOpen('https://example.com/?trick=iframe');
+  if (window.__mode==='reqsubmit') hiddenRequestSubmit('https://example.com/?trick=reqsubmit');
+  if (window.__mode==='btnclick') hiddenButtonClick('https://example.com/?trick=btnclick');
+}, true);
+</script>

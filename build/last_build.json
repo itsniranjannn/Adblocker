@@ -1,13 +1,14 @@
 {
   "raw": {
     "seed": 26770,
+    "extra": 3,
     "peter-lowe": 3567,
     "easylist": 46464,
     "easyprivacy": 47390
   },
-  "domains": 102483,
-  "rules": 45,
-  "bytes": 2248571,
+  "domains": 102484,
+  "rules": 46,
+  "bytes": 2248871,
   "built": "2026-11-18",
   "sources": [
     "peter-lowe",

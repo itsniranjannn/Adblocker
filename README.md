@@ -22,6 +22,8 @@ Lightweight Manifest V3 ad / popup / popunder blocker for Chrome, Edge and Brave
 - Script-made `<a target=_blank>.click()` and invisible full-page click-catching links are blocked.
 - A tab opened from another tab whose load gets blocked is closed automatically. Tabs you open yourself are never touched.
 - A click on the page background that tries to send *this* tab to another site (current-tab clickunder) is cancelled. Redirects after a click on a button/link/clickable card, redirects with no click (logins, SSO) and form posts are never touched. Limit: an ad script that fires on a click on a real button looks the same as a legitimate script, so it is allowed.
+- Hidden-form popunders (`<form target=_blank>` built and submitted by a script on your first mouse press, a favourite of streaming-site ad scripts) are blocked unless the form is visible and you just clicked a real control.
+- A site may open its own mirror domains (`name.fr` to `new15.name.cl`): same site name on a different TLD counts as the same site.
 - A legitimate popup got blocked? Open the icon, see it listed, press **Pause on this site**, or add its host to `OK_HOSTS`.
 
 ## Blocked a popup you wanted?
@@ -40,6 +42,13 @@ npm run rules          # downloads the lists and rebuilds rules/ads.json
 ```
 GitHub Actions does this automatically on the 1st of each month (`update-lists.yml`): it rebuilds, runs every test, and only commits if all pass. `ci.yml` runs the full suite on every push.
 `build/allow.txt` lists domains that must never be blocked; `build/seed_domains.txt` is the original hand-collected list. Only plain domain rules are used, so matching stays native and fast.
+
+## Probe a real site
+```
+npm run probe -- https://example.com/      # or list sites in test/sites.local.json (gitignored)
+npm run probe -- --no-ext https://...      # same visit without LiteBlock, for comparison
+```
+Opens a title page, taps around the player like a visitor and prints every tab, popup attempt and anti-adblock message. Throwaway profile, downloads refused.
 
 ## Tests
 ```

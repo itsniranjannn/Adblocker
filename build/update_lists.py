@@ -58,6 +58,8 @@ def main():
     sets, stats = {}, {}
     seed = BUILD / 'seed_domains.txt'
     sets['seed'] = parse_plain(l for l in seed.read_text().splitlines() if not l.startswith('#'))
+    extra = BUILD / 'extra_domains.txt'
+    if extra.exists(): sets['extra'] = parse_plain(l for l in extra.read_text().splitlines() if not l.startswith('#'))
     for name, url in SOURCES.items():
         lines = fetch(name, url, offline)
         sets[name] = parse_plain(lines) if name == 'peter-lowe' else parse_abp(lines)
@@ -83,6 +85,13 @@ def main():
     for f in ["||youtube.com/pagead/", "||youtube.com/api/stats/ads", "||youtube.com/get_midroll_"]:
         rules.append({"id": rid, "priority": 1, "action": {"type": "block"},
                       "condition": {"urlFilter": f, "resourceTypes": ["xmlhttprequest","image","script","ping","other","media"]}}); rid += 1
+    # Throwaway ad domains rotate daily (random labels on abused TLDs), so lists never catch them.
+    # Block third-party subresources from TLDs that are almost only used for that. Not main_frame,
+    # so a site you open on purpose still loads.
+    rules.append({"id": rid, "priority": 1, "action": {"type": "block"}, "condition": {
+        "regexFilter": "^https?://[^/]+\\.(cfd|sbs|icu|cyou|monster|quest|rest|buzz|qpon)(:[0-9]+)?/",
+        "domainType": "thirdParty",
+        "resourceTypes": ["script", "sub_frame", "xmlhttprequest", "ping", "image", "media", "websocket", "other"]}}); rid += 1
     # tracking parameters stripped natively on top-level navigations
     rules.append({"id": rid, "priority": 1, "action": {"type": "redirect", "redirect": {"transform": {"queryTransform": {
         "removeParams": ["fbclid","gclid","dclid","msclkid","mc_eid","igshid","utm_source","utm_medium","utm_campaign","utm_term","utm_content","utm_id","yclid"]}}}},

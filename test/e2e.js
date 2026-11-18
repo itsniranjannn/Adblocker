@@ -40,6 +40,12 @@ const BASE = 'http://localhost:5599';
   });
   check('ad domain blocked', net.ad === 'BLOCKED'); check('allow-listed analytics not blocked', net.tracker === 'LOADED');
   check('normal site loads', net.ok === 'LOADED');
+  const rot = await page.evaluate(async () => {
+    const t = u => fetch(u, { mode: 'no-cors' }).then(() => 'LOADED', () => 'BLOCKED');
+    return { tld: await t('https://cqorjv9eg.jbwj6158e9rbk2cru.cfd/a.js'), listed: await t('https://sads.adsboosters.xyz/x.js'), okxyz: await t('https://example.xyz/') };
+  });
+  check('rotating throwaway ad domain (abused TLD) blocked', rot.tld === 'BLOCKED');
+  check('hand-added ad domain blocked', rot.listed === 'BLOCKED');
 
   await page.goto(`${BASE}/test/popups.html?utm_source=x&fbclid=abc&keep=1`); await settle();
   check('tracking params stripped, others kept', page.url().includes('keep=1') && !/utm_source|fbclid/.test(page.url()), page.url());

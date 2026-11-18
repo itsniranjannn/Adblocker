@@ -21,10 +21,10 @@ function serve(port = 5599) {
   });
 }
 
-async function launch({ extension = true, headless = false, safe = false } = {}) {
+async function launch({ extension = true, headless = false, safe = false, hosts = '' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'liteblock-'));
-  const args = extension ? [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`,
-    '--disable-features=DisableLoadExtensionCommandLineSwitch'] : [];
+  const args = (hosts ? [`--host-resolver-rules=${hosts}`] : []).concat(extension ? [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`,
+    '--disable-features=DisableLoadExtensionCommandLineSwitch'] : []);
   const ctx = await chromium.launchPersistentContext(dir, { executablePath: exe, headless, args, acceptDownloads: !safe, permissions: [] });
   let sw = null;
   if (extension) {

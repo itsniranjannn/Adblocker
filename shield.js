@@ -14,7 +14,11 @@
 
   const site = h => h.split('.').slice(-2).join('.');
   const here = site(location.hostname);
-  const sameSite = h => site(h) === here;
+  // Mirror domains of one site (hdhub4u.fr -> new15.hdhub4u.cl) share a name but not a TLD.
+  const SLD2 = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac']);
+  const brand = h => { const p = h.split('.'), n = p.length; if (n < 2) return h; return p[(n >= 3 && p[n - 1].length === 2 && SLD2.has(p[n - 2])) ? n - 3 : n - 2]; };
+  const hereBrand = brand(location.hostname);
+  const sameSite = h => site(h) === here || (hereBrand.length >= 5 && brand(h) === hereBrand);
 
   let lastClick = null; // { interactive: bool }
 
@@ -83,6 +87,14 @@
     } catch (_) { return false; }
   }
 
+  const noteDown = e => {
+    if (!e.isTrusted) return;
+    const t = e.target instanceof Element ? e.target : null;
+    const control = !!t && !!t.closest && (!!t.closest(INTERACTIVE) || getComputedStyle(t).cursor === 'pointer');
+    lastClick = { interactive: control && !isHijackOverlay(t), at: performance.now() };
+  };
+  for (const ev of ['pointerdown', 'mousedown', 'touchstart']) addEventListener(ev, noteDown, true);
+
   addEventListener('click', e => {
     if (off()) return;
     const t = e.target instanceof Element ? e.target : null;
@@ -129,17 +141,34 @@
     });
   }
 
-  // ---- hidden forms that submit into a new tab -------------------------------
+  // ---- forms that submit into a new tab ---------------------------------------------
+  // Popunder scripts build a hidden <form target=_blank>, submit it on your first mouse press and
+  // remove it. Blocked unless the form is visible AND you just clicked a real control, or the target
+  // is the same site / a known sign-in or payment host. Attributes are read with getAttribute because
+  // an <input name="action"> would shadow form.action.
+  const frameNamed = t => { try { if (window.frames[t]) return true; } catch (_) {} return [...document.querySelectorAll('iframe,frame')].some(x => x.name === t); };
+  function badForm(f) {
+    if (off() || !(f instanceof HTMLFormElement)) return false;
+    const t = (f.getAttribute('target') || '').toLowerCase();
+    if (!t || t === '_self' || t === '_top' || t === '_parent') return false;
+    if (t !== '_blank' && frameNamed(t)) return false;                    // posts into an iframe, not a popup
+    const u = parse(f.getAttribute('action'));
+    if (!u || (u.protocol !== 'http:' && u.protocol !== 'https:')) return false;
+    if (sameSite(u.hostname) || OK_HOSTS.test(u.hostname) || userOk(u.hostname)) return false;
+    const visible = f.getClientRects().length > 0;
+    const fresh = !!lastClick && lastClick.interactive && performance.now() - lastClick.at < 5000;
+    return !(visible && fresh);
+  }
+
   const realSubmit = HTMLFormElement.prototype.submit;
   HTMLFormElement.prototype.submit = new Proxy(realSubmit, {
     apply(target, self, args) {
-      if (!off() && self.target && self.target !== '_self') {
-        const u = parse(self.action);
-        if (u && !sameSite(u.hostname) && !OK_HOSTS.test(u.hostname) && !(navigator.userActivation && navigator.userActivation.isActive)) {
-          report(self.action); return;
-        }
-      }
+      if (badForm(self)) { report(self.getAttribute('action'), false); return; }
       return Reflect.apply(target, self, args);
     }
   });
+  // requestSubmit() and script clicks on a submit button fire a submit event instead
+  addEventListener('submit', e => {
+    if (badForm(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); report(e.target.getAttribute('action'), false); }
+  }, true);
 })();
