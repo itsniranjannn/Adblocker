@@ -3,3 +3,5 @@ build/cache/
 test/.profile/
 _metadata/
 *.log
+test/sites.local.json
+test/shots/
