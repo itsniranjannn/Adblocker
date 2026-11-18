@@ -1,99 +1,33 @@
-// Popup Script for Ultra-Lightweight Ad Blocker
-
-document.addEventListener('DOMContentLoaded', () => {
-  const totalBlockedEl = document.getElementById('totalBlocked');
-  const adsBlockedEl = document.getElementById('adsBlocked');
-  const popupsBlockedEl = document.getElementById('popupsBlocked');
-  const ytAdsSkippedEl = document.getElementById('ytAdsSkipped');
-  const fbSponsoredRemovedEl = document.getElementById('fbSponsoredRemoved');
-
-  const togglePopupsEl = document.getElementById('togglePopups');
-  const toggleYTEl = document.getElementById('toggleYT');
-  const toggleFBEl = document.getElementById('toggleFB');
-  const resetStatsBtn = document.getElementById('resetStats');
-
-  let currentTotal = 0;
-
-  // Smooth counter-up animation
-  function animateValue(obj, start, end, duration) {
-    if (start === end) {
-      obj.textContent = end.toLocaleString();
-      return;
-    }
-    let startTimestamp = null;
-    const step = (timestamp) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-      const val = Math.floor(progress * (end - start) + start);
-      obj.textContent = val.toLocaleString();
-      if (progress < 1) {
-        window.requestAnimationFrame(step);
-      }
-    };
-    window.requestAnimationFrame(step);
+(async () => {
+  const $ = id => document.getElementById(id);
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let host = '';
+  try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch (_) {}
+  if (!/^[a-z0-9.-]+\.[a-z]+$/i.test(host)) {
+    $('host').textContent = 'This page can’t be filtered.';
+    $('toggle').remove(); $('state').textContent = 'n/a';
+    return;
   }
+  $('host').textContent = host;
 
-  // Load and render stats & toggles
-  function updateUI() {
-    chrome.storage.local.get(['stats', 'settings'], (res) => {
-      const stats = res.stats || {};
-      const settings = res.settings || {};
+  const { paused = [] } = await chrome.storage.local.get('paused');
+  const isOff = paused.includes(host);
+  $('m').classList.toggle('off', isOff);
+  $('state').textContent = isOff ? 'Paused on this site' : 'Blocking on this site';
+  $('toggle').textContent = isOff ? 'Resume blocking' : 'Pause on this site';
+  $('toggle').onclick = async () => {
+    await chrome.runtime.sendMessage({ t: 'toggle', host });
+    chrome.tabs.reload(tab.id);
+    window.close();
+  };
 
-      const ads = stats.adsBlocked || 0;
-      const popups = stats.popupsBlocked || 0;
-      const yt = stats.ytAdsSkipped || 0;
-      const fb = stats.fbSponsoredRemoved || 0;
-
-      const total = ads + popups + yt + fb;
-
-      if (total !== currentTotal) {
-        animateValue(totalBlockedEl, currentTotal, total, 300);
-        currentTotal = total;
-      } else {
-        totalBlockedEl.textContent = total.toLocaleString();
-      }
-
-      adsBlockedEl.textContent = ads.toLocaleString();
-      popupsBlockedEl.textContent = popups.toLocaleString();
-      ytAdsSkippedEl.textContent = yt.toLocaleString();
-      fbSponsoredRemovedEl.textContent = fb.toLocaleString();
-
-      if (settings.blockPopups !== undefined) togglePopupsEl.checked = settings.blockPopups;
-      if (settings.ytAutoSkip !== undefined) toggleYTEl.checked = settings.ytAutoSkip;
-      if (settings.fbCleaner !== undefined) toggleFBEl.checked = settings.fbCleaner;
-    });
+  const key = 'b' + tab.id;
+  const list = (await chrome.storage.session.get(key))[key] || [];
+  if (list.length) {
+    const h = document.createElement('h2');
+    h.textContent = `Popups blocked on this page (${list.length})`;
+    const ul = document.createElement('ul');
+    for (const u of list.slice().reverse()) { const li = document.createElement('li'); li.textContent = u; ul.append(li); }
+    $('log').append(h, ul);
   }
-
-  // Save toggle settings
-  function saveSetting(key, val) {
-    chrome.storage.local.get(['settings'], (res) => {
-      const settings = res.settings || {};
-      settings[key] = val;
-      chrome.storage.local.set({ settings });
-    });
-  }
-
-  togglePopupsEl.addEventListener('change', (e) => saveSetting('blockPopups', e.target.checked));
-  toggleYTEl.addEventListener('change', (e) => saveSetting('ytAutoSkip', e.target.checked));
-  toggleFBEl.addEventListener('change', (e) => saveSetting('fbCleaner', e.target.checked));
-
-  // Reset threat stats button
-  resetStatsBtn.addEventListener('click', () => {
-    resetStatsBtn.style.transform = 'scale(0.97)';
-    setTimeout(() => resetStatsBtn.style.transform = 'none', 150);
-
-    const emptyStats = {
-      adsBlocked: 0,
-      popupsBlocked: 0,
-      ytAdsSkipped: 0,
-      fbSponsoredRemoved: 0
-    };
-    currentTotal = 0;
-    chrome.storage.local.set({ stats: emptyStats }, () => {
-      updateUI();
-    });
-  });
-
-  updateUI();
-  setInterval(updateUI, 1000);
-});
+})();

@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>LiteBlock test</title>
+<body style="font:16px sans-serif;padding:20px">
+<h3>LiteBlock popup tests</h3>
+<button id="same">same-origin open (should open)</button>
+<button id="cross">cross-origin open (should be blocked)</button>
+<a id="legit" href="/test/popups.html?legit" target="_blank">legit target=_blank same-site link (should open)</a>
+<a id="xlegit" href="https://example.org/" target="_blank">user link to other site (should open - user intent)</a>
+<script>
+// 1. popup on load, no user gesture
+window.open('https://example.com/?load');
+// 2. clickunder: any click anywhere opens an ad
+document.addEventListener('click',()=>{ if(window.__armed) window.open('https://ads.example.net/?clickunder'); });
+// 3. synthetic anchor
+window.synth=()=>{const a=document.createElement('a');a.href='https://ads.example.net/?synth';a.target='_blank';document.body.appendChild(a);a.click();};
+// 4. invisible full-page overlay link
+window.overlay=()=>{const a=document.createElement('a');a.href='https://ads.example.net/?overlay';a.target='_blank';a.style.cssText='position:fixed;inset:0;opacity:0;z-index:99999';a.id='ov';document.body.appendChild(a);};
+document.getElementById('same').onclick=()=>window.open('/test/popups.html?same');
+document.getElementById('cross').onclick=()=>window.open('https://example.com/?btn');
+</script>

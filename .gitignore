@@ -1,25 +1,5 @@
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# IDE / Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Node / Package temporary files
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Build / Temp files
-dist/
-build/
-*.tmp
+build/cache/
+test/.profile/
+_metadata/
+*.log

@@ -1,62 +1,43 @@
 {
   "manifest_version": 3,
-  "name": "Lightweight Ad Blocker Pro",
-  "version": "2.0",
-  "description": "Ultra-lightweight ad blocker with zero-CPU cosmetic engine, popunder & clickunder shield, YouTube auto-skip, and modern dark UI.",
-  "permissions": [
-    "declarativeNetRequest",
-    "declarativeNetRequestFeedback",
-    "storage",
-    "tabs",
-    "webNavigation"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
-  "background": {
-    "service_worker": "background.js"
+  "name": "LiteBlock",
+  "version": "3.0.0",
+  "description": "Lightweight ad, popup and popunder blocker. No timers, no DOM scanning.",
+  "minimum_chrome_version": "111",
+  "permissions": ["declarativeNetRequest", "storage", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "declarative_net_request": {
+    "rule_resources": [{ "id": "ads", "enabled": true, "path": "rules/ads.json" }]
   },
   "content_scripts": [
     {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content_main.js"
-      ],
+      "matches": ["<all_urls>"],
+      "js": ["shield.js"],
       "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
       "world": "MAIN"
     },
     {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "css": [
-        "cosmetic.css"
-      ],
+      "matches": ["<all_urls>"],
+      "js": ["site.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "css": ["cosmetic.css"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*"],
+      "js": ["yt.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "Lightweight Ad Blocker Pro"
-  },
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "adblock_rules",
-        "enabled": true,
-        "path": "rules.json"
-      }
-    ]
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png",
-    "512": "icons/icon512.png"
-  }
+  "action": { "default_popup": "popup.html", "default_title": "LiteBlock" },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
 }
