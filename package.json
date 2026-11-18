@@ -1,0 +1,15 @@
+{
+  "name": "liteblock",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Lightweight MV3 ad, popup and popunder blocker",
+  "scripts": {
+    "rules": "python build/update_lists.py",
+    "test": "node test/rules.test.js && node test/e2e.js",
+    "test:rules": "node test/rules.test.js",
+    "test:e2e": "node test/e2e.js",
+    "test:sites": "node test/sites.js",
+    "bench": "node test/bench.js"
+  },
+  "devDependencies": { "playwright-core": "^1.49.0" }
+}

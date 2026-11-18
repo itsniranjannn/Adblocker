@@ -1,0 +1,19 @@
+# Domains that must never be blocked (matches subdomains too). One per line.
+imasdk.googleapis.com
+googletagmanager.com
+google-analytics.com
+gstatic.com
+googleapis.com
+recaptcha.net
+cloudflare.com
+jsdelivr.net
+unpkg.com
+cdnjs.cloudflare.com
+fastly.net
+akamaihd.net
+akamaized.net
+fbcdn.net
+ytimg.com
+googlevideo.com
+twimg.com
+okx.com

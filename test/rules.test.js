@@ -1,0 +1,22 @@
+// Static checks on rules/ads.json: structure, limits, and that nothing important is blocked.
+const fs = require('fs'), path = require('path');
+const { check, done } = require('./helpers');
+const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '../rules/ads.json'), 'utf8'));
+const ids = rules.map(r => r.id);
+check('rule ids unique and positive', new Set(ids).size === ids.length && ids.every(i => i > 0));
+check('rule count well under the 30k guaranteed limit', rules.length < 1000, `(${rules.length})`);
+const doms = rules.flatMap(r => r.condition.requestDomains || []);
+check('domains are lowercase hostnames', doms.every(d => /^[a-z0-9][a-z0-9.-]*\.[a-z0-9-]{2,}$/.test(d)));
+check('no duplicate domains', new Set(doms).size === doms.length);
+const set = new Set(doms);
+const nested = doms.filter(d => d.split('.').slice(1, -1).some((_, i, a) => set.has(d.split('.').slice(i + 1).join('.'))));
+check('no redundant subdomains of blocked parents', nested.length === 0, nested.slice(0, 3).join(','));
+const PROTECTED = ['google.com','youtube.com','facebook.com','github.com','microsoft.com','amazon.com','wikipedia.org','reddit.com','cloudflare.com','gstatic.com','googleapis.com','jsdelivr.net','ytimg.com','googlevideo.com'];
+const bad = PROTECTED.filter(p => doms.some(d => p === d || p.endsWith('.' + d)));
+check('no protected site is blocked', bad.length === 0, bad.join(','));
+const hasAllow = ['imasdk.googleapis.com', 'googletagmanager.com'].filter(d => doms.some(x => d === x || d.endsWith('.' + x)));
+check('known breakage domains excluded', hasAllow.length === 0, hasAllow.join(','));
+const size = fs.statSync(path.join(__dirname, '../rules/ads.json')).size;
+check('ruleset under 6 MB', size < 6e6, `(${(size / 1e6).toFixed(2)} MB)`);
+check('block rules cover main_frame (popup tabs)', rules.filter(r => r.condition.requestDomains).every(r => r.condition.resourceTypes.includes('main_frame')));
+done();
