@@ -1,6 +1,8 @@
 // LiteBlock service worker. Event-driven only; sleeps the rest of the time.
 // Network blocking itself is done natively by the browser (rules/ads.json).
 
+importScripts('toast.js'); // defines lbToast()
+
 const SESSION = chrome.storage.session;
 const DNR = chrome.declarativeNetRequest;
 const ALL_TYPES = ['main_frame', 'sub_frame', 'script', 'image', 'stylesheet', 'object', 'xmlhttprequest',
@@ -86,15 +88,38 @@ async function startDiag(tabId) {
 
 // ---- messages ---------------------------------------------------------------
 chrome.runtime.onMessage.addListener((msg, sender, send) => {
-  if (msg.t === 'blocked' && sender.tab) {
-    const key = 'b' + sender.tab.id;
-    SESSION.get(key).then(r => SESSION.set({ [key]: (r[key] || []).concat(msg.url).slice(-20) }));
-    return;
-  }
+  if (msg.t === 'blocked' && sender.tab) { onBlockedPopup(sender.tab.id, msg); return; }
+  if (msg.t === 'openok') { addOpenOk(msg.host); return; }
   if (msg.t === 'toggle') { toggleList('paused', msg.host).then(() => send(true)); return true; }
   if (msg.t === 'allow') { toggleList('allowed', msg.domain).then(() => send(true)); return true; }
   if (msg.t === 'diag') { startDiag(msg.tabId).then(send); return true; }
 });
 
 chrome.webNavigation.onCommitted.addListener(d => { if (d.frameId === 0) SESSION.remove('b' + d.tabId); });
-chrome.tabs.onRemoved.addListener(id => SESSION.remove(['b' + id, 'd' + id]));
+chrome.tabs.onRemoved.addListener(id => SESSION.remove(['b' + id, 'd' + id, 'tt' + id]));
+
+// ---- blocked popups: log them, and (rarely) offer to allow ------------------------
+const TOAST_GAP_MS = 15000;
+async function onBlockedPopup(tabId, msg) {
+  const key = 'b' + tabId;
+  const r = await SESSION.get(key);
+  await SESSION.set({ [key]: (r[key] || []).concat(msg.url).slice(-20) });
+  if (!msg.toast) return;                                   // ad-like block: stay silent
+  let url; try { url = new URL(msg.url); } catch (_) { return; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+  const { toast = true } = await chrome.storage.local.get('toast');
+  if (!toast) return;
+  const tk = 'tt' + tabId;
+  const last = (await SESSION.get(tk))[tk] || 0;
+  if (Date.now() - last < TOAST_GAP_MS) return;             // never spam
+  await SESSION.set({ [tk]: Date.now() });
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: lbToast, args: [url.href] });
+  } catch (_) {}
+}
+
+async function addOpenOk(host) {
+  if (typeof host !== 'string' || !/^[a-z0-9.-]+$/i.test(host)) return;
+  const { openOk = [] } = await chrome.storage.local.get('openOk');
+  if (!openOk.includes(host)) await chrome.storage.local.set({ openOk: openOk.concat(host) });
+}

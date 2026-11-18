@@ -18,9 +18,16 @@
 
   let lastClick = null; // { interactive: bool }
 
-  const report = url => {
-    try { document.dispatchEvent(new CustomEvent('__lb_blocked', { detail: String(url).slice(0, 300) })); } catch (_) {}
+  // toast=true only for a cross-site window.open that followed a real click on a button/link:
+  // the one case where the user may have wanted the popup.
+  const report = (url, toast) => {
+    try {
+      const u = parse(url);
+      document.dispatchEvent(new CustomEvent('__lb_blocked', {
+        detail: JSON.stringify({ u: (u ? u.href : String(url)).slice(0, 300), t: toast ? 1 : 0 }) }));
+    } catch (_) {}
   };
+  const userOk = h => (root.getAttribute('data-lb-ok') || '').split(' ').some(x => x && (h === x || h.endsWith('.' + x)));
 
   function parse(u) {
     try { return new URL(u || 'about:blank', location.href); } catch (_) { return null; }
@@ -35,7 +42,13 @@
     if (url.href === 'about:blank') return !!(lastClick && lastClick.interactive); // open-blank-then-redirect trick
     if (url.protocol === 'blob:' || url.protocol === 'data:') return true;
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    return sameSite(url.hostname) || OK_HOSTS.test(url.hostname);
+    return sameSite(url.hostname) || OK_HOSTS.test(url.hostname) || userOk(url.hostname);
+  }
+
+  function toastWorthy(u) {
+    if (!(navigator.userActivation && navigator.userActivation.isActive && lastClick && lastClick.interactive)) return false;
+    const url = parse(u);
+    return !!url && (url.protocol === 'http:' || url.protocol === 'https:');
   }
 
   // ---- window.open ----------------------------------------------------------
@@ -48,7 +61,7 @@
   window.open = new Proxy(realOpen, {
     apply(target, self, args) {
       if (allowOpen(args[0])) return Reflect.apply(target, self, args);
-      report(args[0] || 'about:blank');
+      report(args[0] || 'about:blank', toastWorthy(args[0]));
       // Pretend it worked so scripts do not fall back to hijacking this tab.
       return stub();
     }

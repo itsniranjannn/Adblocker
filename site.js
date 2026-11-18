@@ -8,7 +8,8 @@
     : location.hostname;
   const bare = top.replace(/^www\./, '');
 
-  chrome.storage.local.get(['paused', 'zaps'], ({ paused, zaps }) => {
+  chrome.storage.local.get(['paused', 'zaps', 'openOk'], ({ paused, zaps, openOk }) => {
+    if (openOk && openOk.length) document.documentElement.setAttribute('data-lb-ok', openOk.join(' '));
     if (paused && paused.some(h => top === h || top.endsWith('.' + h))) {
       document.documentElement.setAttribute('data-lb-off', '');
     }
@@ -24,6 +25,8 @@
   });
 
   document.addEventListener('__lb_blocked', e => {
-    try { chrome.runtime.sendMessage({ t: 'blocked', url: String(e.detail || '') }); } catch (_) {}
+    let d; try { d = JSON.parse(e.detail); } catch (_) { return; }
+    if (!d || typeof d.u !== 'string') return;
+    try { chrome.runtime.sendMessage({ t: 'blocked', url: d.u.slice(0, 300), toast: d.t === 1 }); } catch (_) {}
   });
 })();

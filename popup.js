@@ -5,8 +5,8 @@
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let host = '';
   try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch (_) {}
-  const local = await chrome.storage.local.get(['paused', 'allowed', 'zaps']);
-  const paused = local.paused || [], allowed = local.allowed || [], zaps = local.zaps || {};
+  const local = await chrome.storage.local.get(['paused', 'allowed', 'zaps', 'openOk', 'toast']);
+  const paused = local.paused || [], allowed = local.allowed || [], zaps = local.zaps || {}, openOk = local.openOk || [];
 
   async function render() {
     const log = $('log'); log.textContent = '';
@@ -51,6 +51,21 @@
       log.append(ul);
     }
 
+    if (openOk.length) {
+      log.append(el('h2', `Popup targets you allowed (${openOk.length})`));
+      const ul = el('ul');
+      for (const h of openOk.slice()) {
+        const li = el('li'); li.append(el('span', h, 'dom'));
+        const b = el('button', 'Remove', 'sm');
+        b.onclick = async () => {
+          openOk.splice(openOk.indexOf(h), 1);
+          await chrome.storage.local.set({ openOk }); li.remove();
+        };
+        li.append(b); ul.append(li);
+      }
+      log.append(ul);
+    }
+
     if (allowed.length) {
       log.append(el('h2', `Your allowed domains (${allowed.length})`));
       const ul = el('ul');
@@ -66,7 +81,7 @@
 
   if (!/^[a-z0-9.-]+$/i.test(host)) {
     $('host').textContent = 'This page can’t be filtered.';
-    $('toggle').remove(); $('diag').remove(); $('zap').remove(); $('state').textContent = 'n/a';
+    $('toggle').remove(); $('diag').remove(); $('zap').remove(); $('toast').closest('label').remove(); $('state').textContent = 'n/a';
     return;
   }
   $('host').textContent = host;
@@ -75,6 +90,8 @@
   $('state').textContent = isOff ? 'Paused on this site' : 'Blocking on this site';
   $('toggle').textContent = isOff ? 'Resume blocking' : 'Pause on this site';
   $('toggle').onclick = async () => { await send({ t: 'toggle', host }); chrome.tabs.reload(tab.id); window.close(); };
+  $('toast').checked = local.toast !== false;
+  $('toast').onchange = () => chrome.storage.local.set({ toast: $('toast').checked });
   $('zap').onclick = async () => {
     try { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['zapper.js'] }); window.close(); }
     catch (_) { $('zap').textContent = 'Cannot zap on this page'; $('zap').disabled = true; }
