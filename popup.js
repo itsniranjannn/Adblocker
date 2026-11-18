@@ -1,33 +1,67 @@
 (async () => {
   const $ = id => document.getElementById(id);
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  const send = m => chrome.runtime.sendMessage(m);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let host = '';
   try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch (_) {}
+  const local = await chrome.storage.local.get(['paused', 'allowed']);
+  const paused = local.paused || [], allowed = local.allowed || [];
+
+  async function render() {
+    const log = $('log'); log.textContent = '';
+    const sess = await chrome.storage.session.get(['b' + tab.id, 'd' + tab.id, 'diagActive']);
+
+    const pops = sess['b' + tab.id] || [];
+    if (pops.length) {
+      log.append(el('h2', `Popups blocked on this page (${pops.length})`));
+      const ul = el('ul'); for (const u of pops.slice().reverse()) ul.append(el('li', u)); log.append(ul);
+    }
+
+    const rows = sess['d' + tab.id];
+    if (sess.diagActive === tab.id && !rows) log.append(el('h2', 'Diagnosing… reload the page, then reopen this panel.'));
+    if (rows) {
+      log.append(el('h2', `Blocked requests on this page (${rows.length} domains)`));
+      if (!rows.length) log.append(el('div', 'Nothing was blocked by the network rules.', 'mut'));
+      const ul = el('ul');
+      for (const [d, n] of rows) {
+        const li = el('li'); li.append(el('span', `${d} × ${n}`, 'dom'));
+        const b = el('button', allowed.includes(d) ? 'Allowed' : 'Allow', 'sm');
+        b.disabled = allowed.includes(d);
+        b.onclick = async () => { await send({ t: 'allow', domain: d }); b.textContent = 'Allowed'; b.disabled = true; allowed.push(d); };
+        li.append(b); ul.append(li);
+      }
+      log.append(ul, el('div', 'Reload the page after allowing a domain.', 'mut'));
+    }
+
+    if (allowed.length) {
+      log.append(el('h2', `Your allowed domains (${allowed.length})`));
+      const ul = el('ul');
+      for (const d of allowed) {
+        const li = el('li'); li.append(el('span', d, 'dom'));
+        const b = el('button', 'Remove', 'sm');
+        b.onclick = async () => { await send({ t: 'allow', domain: d }); li.remove(); };
+        li.append(b); ul.append(li);
+      }
+      log.append(ul);
+    }
+  }
+
   if (!/^[a-z0-9.-]+\.[a-z]+$/i.test(host)) {
     $('host').textContent = 'This page can’t be filtered.';
-    $('toggle').remove(); $('state').textContent = 'n/a';
+    $('toggle').remove(); $('diag').remove(); $('state').textContent = 'n/a';
     return;
   }
   $('host').textContent = host;
-
-  const { paused = [] } = await chrome.storage.local.get('paused');
   const isOff = paused.includes(host);
   $('m').classList.toggle('off', isOff);
   $('state').textContent = isOff ? 'Paused on this site' : 'Blocking on this site';
   $('toggle').textContent = isOff ? 'Resume blocking' : 'Pause on this site';
-  $('toggle').onclick = async () => {
-    await chrome.runtime.sendMessage({ t: 'toggle', host });
-    chrome.tabs.reload(tab.id);
-    window.close();
+  $('toggle').onclick = async () => { await send({ t: 'toggle', host }); chrome.tabs.reload(tab.id); window.close(); };
+  $('diag').onclick = async () => {
+    const ok = await send({ t: 'diag', tabId: tab.id });
+    if (!ok) { $('diag').textContent = 'Diagnose needs an unpacked install'; $('diag').disabled = true; return; }
+    chrome.tabs.reload(tab.id); window.close();
   };
-
-  const key = 'b' + tab.id;
-  const list = (await chrome.storage.session.get(key))[key] || [];
-  if (list.length) {
-    const h = document.createElement('h2');
-    h.textContent = `Popups blocked on this page (${list.length})`;
-    const ul = document.createElement('ul');
-    for (const u of list.slice().reverse()) { const li = document.createElement('li'); li.textContent = u; ul.append(li); }
-    $('log').append(h, ul);
-  }
+  render();
 })();

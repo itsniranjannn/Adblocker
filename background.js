@@ -2,10 +2,14 @@
 // Network blocking itself is done natively by the browser (rules/ads.json).
 
 const SESSION = chrome.storage.session;
+const DNR = chrome.declarativeNetRequest;
+const ALL_TYPES = ['main_frame', 'sub_frame', 'script', 'image', 'stylesheet', 'object', 'xmlhttprequest',
+  'font', 'media', 'websocket', 'ping', 'other'];
+const DIAG_MS = 120000;
 
 function setup() {
   // Native per-tab blocked-request counter on the toolbar icon (zero cost).
-  chrome.declarativeNetRequest.setExtensionActionOptions({ displayActionCountAsBadgeText: true });
+  DNR.setExtensionActionOptions({ displayActionCountAsBadgeText: true });
 }
 chrome.runtime.onInstalled.addListener(setup);
 chrome.runtime.onStartup.addListener(setup);
@@ -21,40 +25,76 @@ chrome.webNavigation.onErrorOccurred.addListener(async d => {
   } catch (_) {}
 });
 
-// ---- per-tab list of popups blocked by the page shield ---------------------
-chrome.runtime.onMessage.addListener((msg, sender) => {
+// ---- user exceptions: paused sites + allowed domains -> dynamic rules -------
+async function applyRules() {
+  const { paused = [], allowed = [] } = await chrome.storage.local.get(['paused', 'allowed']);
+  const old = await DNR.getDynamicRules();
+  const add = [];
+  paused.forEach((h, i) => add.push({
+    id: 1 + i, priority: 100, action: { type: 'allowAllRequests' },
+    condition: { requestDomains: [h], resourceTypes: ['main_frame', 'sub_frame'] } }));
+  allowed.forEach((d, i) => add.push({
+    id: 10001 + i, priority: 50, action: { type: 'allow' },
+    condition: { requestDomains: [d], resourceTypes: ALL_TYPES } }));
+  await DNR.updateDynamicRules({ removeRuleIds: old.map(r => r.id), addRules: add });
+}
+
+async function toggleList(key, value) {
+  const cur = (await chrome.storage.local.get(key))[key] || [];
+  const next = cur.includes(value) ? cur.filter(x => x !== value) : cur.concat(value);
+  await chrome.storage.local.set({ [key]: next });
+  await applyRules();
+  return next;
+}
+
+// ---- diagnose mode: record what gets blocked on one tab, briefly ------------
+// onRuleMatchedDebug exists only for unpacked extensions, and waking the worker
+// for every blocked request is wasteful, so it is attached on demand and
+// removed after two minutes.
+let diag = null; // { tabId, until, seen: Map<host, count>, timer }
+
+function onMatched(info) {
+  if (!diag || info.request.tabId !== diag.tabId) return;
+  if (Date.now() > diag.until) return stopDiag();
+  let host; try { host = new URL(info.request.url).hostname; } catch (_) { return; }
+  diag.seen.set(host, (diag.seen.get(host) || 0) + 1);
+  clearTimeout(diag.timer);
+  diag.timer = setTimeout(flushDiag, 300);
+}
+function flushDiag() {
+  if (!diag) return;
+  const rows = [...diag.seen].sort((a, b) => b[1] - a[1]).slice(0, 100);
+  SESSION.set({ ['d' + diag.tabId]: rows, diagActive: diag.tabId });
+}
+function stopDiag() {
+  if (!diag) return;
+  flushDiag();
+  if (DNR.onRuleMatchedDebug) DNR.onRuleMatchedDebug.removeListener(onMatched);
+  SESSION.remove('diagActive');
+  diag = null;
+}
+async function startDiag(tabId) {
+  if (!DNR.onRuleMatchedDebug) return false; // packed/store build: not available
+  stopDiag();
+  await SESSION.remove('d' + tabId);
+  diag = { tabId, until: Date.now() + DIAG_MS, seen: new Map(), timer: null };
+  DNR.onRuleMatchedDebug.addListener(onMatched);
+  await SESSION.set({ diagActive: tabId });
+  setTimeout(stopDiag, DIAG_MS);
+  return true;
+}
+
+// ---- messages ---------------------------------------------------------------
+chrome.runtime.onMessage.addListener((msg, sender, send) => {
   if (msg.t === 'blocked' && sender.tab) {
     const key = 'b' + sender.tab.id;
-    SESSION.get(key).then(r => {
-      const list = (r[key] || []).concat(msg.url).slice(-20);
-      SESSION.set({ [key]: list });
-    });
+    SESSION.get(key).then(r => SESSION.set({ [key]: (r[key] || []).concat(msg.url).slice(-20) }));
+    return;
   }
+  if (msg.t === 'toggle') { toggleList('paused', msg.host).then(() => send(true)); return true; }
+  if (msg.t === 'allow') { toggleList('allowed', msg.domain).then(() => send(true)); return true; }
+  if (msg.t === 'diag') { startDiag(msg.tabId).then(send); return true; }
 });
 
 chrome.webNavigation.onCommitted.addListener(d => { if (d.frameId === 0) SESSION.remove('b' + d.tabId); });
-chrome.tabs.onRemoved.addListener(id => SESSION.remove('b' + id));
-
-// ---- pause / resume a site --------------------------------------------------
-async function applyPaused(paused) {
-  const old = await chrome.declarativeNetRequest.getDynamicRules();
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: old.map(r => r.id),
-    addRules: paused.map((h, i) => ({
-      id: i + 1, priority: 100,
-      action: { type: 'allowAllRequests' },
-      condition: { requestDomains: [h], resourceTypes: ['main_frame', 'sub_frame'] }
-    }))
-  });
-}
-
-async function toggle(host) {
-  const { paused = [] } = await chrome.storage.local.get('paused');
-  const next = paused.includes(host) ? paused.filter(h => h !== host) : paused.concat(host);
-  await chrome.storage.local.set({ paused: next });
-  await applyPaused(next);
-}
-
-chrome.runtime.onMessage.addListener((msg, _s, send) => {
-  if (msg.t === 'toggle') { toggle(msg.host).then(() => send(true)); return true; }
-});
+chrome.tabs.onRemoved.addListener(id => SESSION.remove(['b' + id, 'd' + id]));

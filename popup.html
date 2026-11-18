@@ -15,11 +15,16 @@
   h2{font-size:12px;color:var(--mut);margin:16px 0 6px;font-weight:600}
   ul{margin:0;padding:0;list-style:none;font-size:12px;color:var(--mut)}
   li{padding:3px 0;word-break:break-all;border-top:1px solid var(--ln)}
+  .mut{color:var(--mut);font-size:12px;margin-top:6px}
+  li{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .dom{word-break:break-all}
+  button.sm{width:auto;padding:2px 8px;font-size:12px;flex:none}
 </style></head>
 <body><main id="m">
   <h1>LiteBlock</h1>
   <div class="host" id="host"></div>
   <div class="state"><span class="dot"></span><span id="state"></span></div>
   <button id="toggle"></button>
+  <button id="diag" style="margin-top:8px">Site broken? Diagnose</button>
   <div id="log"></div>
 </main><script src="popup.js"></script></body></html>

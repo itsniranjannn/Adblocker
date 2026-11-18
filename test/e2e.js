@@ -47,5 +47,24 @@ const BASE = 'http://localhost:5599';
   const pop = await ctx.newPage(); await pop.goto(`chrome-extension://${b.extId}/popup.html`);
   check('popup UI renders', (await pop.textContent('h1')) === 'LiteBlock');
 
+
+  // ---- diagnose -> allow -> remove, and pause ----
+  const tabId = await sw.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost/*' }))[0].id);
+  const adFetch = () => page.evaluate(() => fetch('https://ad.doubleclick.net/x.js', { mode: 'no-cors' }).then(() => 'LOADED', () => 'BLOCKED'));
+  const send = m => pop.evaluate(m => chrome.runtime.sendMessage(m), m);
+  check('diagnose starts', (await send({ t: 'diag', tabId })) === true);
+  await page.reload(); await adFetch(); await page.waitForTimeout(900);
+  const seen = await sw.evaluate(async id => (await chrome.storage.session.get('d' + id))['d' + id] || [], tabId);
+  check('diagnose lists blocked domain', seen.some(r => r[0] === 'ad.doubleclick.net'), JSON.stringify(seen.slice(0, 3)));
+  await send({ t: 'allow', domain: 'ad.doubleclick.net' }); await page.reload();
+  check('allowed domain loads', (await adFetch()) === 'LOADED');
+  await send({ t: 'allow', domain: 'ad.doubleclick.net' }); await page.reload();
+  check('removing allow blocks it again', (await adFetch()) === 'BLOCKED');
+  await send({ t: 'toggle', host: 'localhost' }); await page.reload();
+  check('paused site is not filtered', (await adFetch()) === 'LOADED');
+  check('paused flag set on page', await page.evaluate(() => document.documentElement.hasAttribute('data-lb-off')));
+  await send({ t: 'toggle', host: 'localhost' }); await page.reload();
+  check('resumed site is filtered again', (await adFetch()) === 'BLOCKED');
+
   await b.close(); srv.close(); done();
 })().catch(e => { console.error('ERR', e); process.exit(1); });
