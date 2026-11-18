@@ -1,0 +1,37 @@
+name: Update filter lists
+on:
+  schedule:
+    - cron: '0 3 1 * *'   # 03:00 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium
+      - name: Rebuild rules from the latest lists
+        run: python build/update_lists.py
+      - name: Test before publishing
+        run: |
+          export BROWSER_PATH="$(node -p "require('playwright-core').chromium.executablePath()")"
+          xvfb-run -a npm test
+      - name: Commit if the lists changed
+        run: |
+          if git diff --quiet -- rules/ads.json; then echo "No changes"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rules/ads.json build/last_build.json
+          git commit -m "Update filter lists ($(date -u +%Y-%m-%d))"
+          git push

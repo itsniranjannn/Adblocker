@@ -38,6 +38,7 @@ Open the icon, press **Site broken? Diagnose**; the page reloads and records whi
 ```
 npm run rules          # downloads the lists and rebuilds rules/ads.json
 ```
+GitHub Actions does this automatically on the 1st of each month (`update-lists.yml`): it rebuilds, runs every test, and only commits if all pass. `ci.yml` runs the full suite on every push.
 `build/allow.txt` lists domains that must never be blocked; `build/seed_domains.txt` is the original hand-collected list. Only plain domain rules are used, so matching stays native and fast.
 
 ## Tests
