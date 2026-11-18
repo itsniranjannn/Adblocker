@@ -1,0 +1,11 @@
+{
+  "note": "Edit freely. Add the sites that bother you. Each is loaded once with LiteBlock; the test fails if extra tabs open or the page does not load.",
+  "sites": [
+    "https://www.wikipedia.org/",
+    "https://news.ycombinator.com/",
+    "https://www.bbc.com/news",
+    "https://www.theguardian.com/international",
+    "https://www.dailymail.co.uk/",
+    "https://www.forbes.com/"
+  ]
+}

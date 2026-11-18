@@ -10,7 +10,8 @@ Lightweight Manifest V3 ad / popup / popunder blocker for Chrome, Edge and Brave
 ## How it stays light
 | Layer | Mechanism | Idle cost |
 |---|---|---|
-| Ads / trackers | `declarativeNetRequest`, 26.7k ad domains matched by the browser itself | none (no JS) |
+| Ads / trackers | `declarativeNetRequest`, ~102k ad domains (EasyList, EasyPrivacy, Peter Lowe) matched by the browser itself | none (no JS) |
+| Tracking links | `utm_*`, `fbclid`, `gclid`… stripped natively | none (no JS) |
 | Banner slots | `cosmetic.css`, specific selectors only | none (no JS) |
 | Popups / popunders | `shield.js` wraps `window.open` and checks clicks at click time | none (no timers, no observers) |
 | YouTube | strips ad data from player responses, one attribute observer as fallback | negligible |
@@ -22,8 +23,20 @@ Lightweight Manifest V3 ad / popup / popunder blocker for Chrome, Edge and Brave
 - A tab opened from another tab whose load gets blocked is closed automatically. Tabs you open yourself are never touched.
 - A legitimate popup got blocked? Open the icon, see it listed, press **Pause on this site**, or add its host to `OK_HOSTS`.
 
-## Rebuild the rule list
-`python build/build_rules.py <old rules.json>`; to add domains, extend the list in that script.
+## Site broken? Diagnose
+Open the icon, press **Site broken? Diagnose**; the page reloads and records which domains get blocked (for two minutes only, then it stops listening). Reopen the icon, press **Allow** next to the culprit, reload. Your allowed domains are listed and removable in the same panel. Diagnose needs the unpacked install.
 
-## Test
-`test/popups.html` has every popup trick; serve the folder (`python -m http.server`) and open `/test/popups.html`.
+## Update the filter lists
+```
+npm run rules          # downloads the lists and rebuilds rules/ads.json
+```
+`build/allow.txt` lists domains that must never be blocked; `build/seed_domains.txt` is the original hand-collected list. Only plain domain rules are used, so matching stays native and fast.
+
+## Tests
+```
+npm install
+npm test               # rules checks + real-browser popup / diagnose / pause tests (Edge or Chrome)
+npm run test:sites     # loads the sites in test/sites.json, fails on stray tabs (edit the list)
+npm run bench          # page load, heap and idle CPU with vs without the extension
+```
+Set `BROWSER_PATH` if Edge/Chrome is installed somewhere unusual.
