@@ -10,7 +10,10 @@
   const off = () => root.hasAttribute('data-lb-off'); // set by site.js on paused sites
 
   // Cross-origin popups that are normal: sign-in and share flows.
-  const OK_HOSTS = /(^|\.)(accounts\.google\.com|login\.microsoftonline\.com|login\.live\.com|appleid\.apple\.com|github\.com|facebook\.com|twitter\.com|x\.com|linkedin\.com|discord\.com|paypal\.com|stripe\.com|checkout\.stripe\.com|auth0\.com|okta\.com|pinterest\.com|reddit\.com|t\.me|telegram\.org|wa\.me|whatsapp\.com|line\.me|mail\.google\.com|outlook\.live\.com|zoom\.us|slack\.com|esewa\.com\.np|khalti\.com|connectips\.com)$/i;
+  const OK_HOSTS = /(^|\.)(accounts\.google\.com|login\.microsoftonline\.com|login\.live\.com|appleid\.apple\.com|github\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|linkedin\.com|discord\.com|paypal\.com|stripe\.com|checkout\.stripe\.com|auth0\.com|okta\.com|pinterest\.com|reddit\.com|t\.me|telegram\.org|wa\.me|whatsapp\.com|line\.me|mail\.google\.com|outlook\.live\.com|zoom\.us|slack\.com|esewa\.com\.np|khalti\.com|connectips\.com)$/i;
+
+  // Obvious ad network domains & tracking redirect keywords
+  const AD_HOST_OR_URL = /(clickunder|popunder|popads|popcash|casino|1xbet|1xlite|linebets|betting|adsterra|exoclick|juicyads|monetag|propellerads|hilltopads|ad-maven|adcash|bet365|clickadu|yllix|trafficstars|adpogo|trafficjunky|traffichunt|cpmstar|revenuehits|bidvertiser|admaven|richpush|megapush|pushame|pushground|popmyads|adnium|adskeeper|mgid|smartyads|clickaine|poponclick|zeropark|evadav|galaksion|adprovider|onclickmega|ero-advertising|plugrush|bongacash|popup\.win|poplinks|droplink|clk\.sh|gplinks|push\.house|notifyme\.top|payout=0\.|ads\/redirect|remoby|adfox|adsspyglass|rofrede|clickdealer|revcontent)/i;
 
   const site = h => h.split('.').slice(-2).join('.');
   const here = site(location.hostname);
@@ -40,12 +43,14 @@
   // Should this navigation-to-a-new-window be allowed?
   function allowOpen(u) {
     if (off()) return true;
+    if (u && AD_HOST_OR_URL.test(String(u))) return false; // Known ad network or clickunder URL
     if (!(navigator.userActivation && navigator.userActivation.isActive)) return false; // no real click -> popup ad
     const url = parse(u);
     if (!url) return false;
     if (url.href === 'about:blank') return !!(lastClick && lastClick.interactive); // open-blank-then-redirect trick
     if (url.protocol === 'blob:' || url.protocol === 'data:') return true;
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    if (AD_HOST_OR_URL.test(url.hostname)) return false;
     return sameSite(url.hostname) || OK_HOSTS.test(url.hostname) || userOk(url.hostname);
   }
 
@@ -75,15 +80,35 @@
   const INTERACTIVE = 'a[href],button,input,select,summary,[role="button"],[role="link"],[onclick]';
 
   function isHijackOverlay(el) {
+    if (!el || !(el instanceof Element)) return false;
     // Invisible / full-page element sitting on top of the page to steal clicks.
     try {
       const cs = getComputedStyle(el);
       const r = el.getBoundingClientRect();
       const cover = (r.width * r.height) / Math.max(1, innerWidth * innerHeight);
       const floating = cs.position === 'fixed' || cs.position === 'absolute';
-      const invisible = parseFloat(cs.opacity) < 0.05 || cs.visibility === 'hidden' || cs.backgroundColor === 'rgba(0, 0, 0, 0)';
-      const empty = !el.textContent.trim() && !el.querySelector('img,video,svg,canvas,input,button');
-      return floating && cover > 0.5 && (invisible || empty);
+      const zIndex = parseInt(cs.zIndex, 10);
+      const isHighZ = !isNaN(zIndex) && zIndex >= 50;
+      const opacity = parseFloat(cs.opacity);
+      const invisible = opacity < 0.25 || cs.visibility === 'hidden' || cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent';
+      const empty = !(el.textContent || '').trim() && !el.querySelector('img,video,svg,canvas,input,button');
+      
+      // Full/large overlay covers significant area or high z-index overlay that is invisible/empty
+      if (floating && (cover > 0.25 || isHighZ) && (invisible || empty)) return true;
+
+      // Overlay link itself
+      const a = el.closest('a[href]');
+      if (a && a.target && a.target !== '_self') {
+        const aStyle = getComputedStyle(a);
+        const aRect = a.getBoundingClientRect();
+        const aCover = (aRect.width * aRect.height) / Math.max(1, innerWidth * innerHeight);
+        const aFloat = aStyle.position === 'fixed' || aStyle.position === 'absolute';
+        const aInvisible = parseFloat(aStyle.opacity) < 0.25 || aStyle.visibility === 'hidden' || !(a.innerText || '').trim();
+        if (aFloat && (aCover > 0.2 || parseInt(aStyle.zIndex, 10) >= 50) && aInvisible) {
+          return true;
+        }
+      }
+      return false;
     } catch (_) { return false; }
   }
 
@@ -114,9 +139,13 @@
     const control = !!t && !!t.closest && (!!t.closest(INTERACTIVE) || getComputedStyle(t).cursor === 'pointer');
     lastClick = { interactive: control && !isHijackOverlay(t), at: performance.now() };
 
-    // Real click, but on an invisible click-catching overlay that links out.
-    if (a && a.target && a.target !== '_self' && isHijackOverlay(a)) {
-      e.preventDefault(); e.stopImmediatePropagation(); report(a.href);
+    // Real click, but on an invisible click-catching overlay or link that opens new tab
+    if (a && a.target && a.target !== '_self') {
+      const u = parse(a.href);
+      if (isHijackOverlay(a) || isHijackOverlay(t) || (u && AD_HOST_OR_URL.test(u.hostname + u.pathname))) {
+        e.preventDefault(); e.stopImmediatePropagation(); report(a.href);
+        return;
+      }
     }
   }, true);
 

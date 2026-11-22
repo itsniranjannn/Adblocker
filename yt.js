@@ -40,20 +40,55 @@
     }
   });
 
-  // Layer 2
+  // Layer 2: Fast-forward + skip ad + auto-click all known skip button variations
   let saved = null;
-  const SKIP = '.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern';
+  const SKIP_SELECTORS = [
+    '.ytp-ad-skip-button',
+    '.ytp-ad-skip-button-modern',
+    '.ytp-skip-ad-button',
+    'button.ytp-ad-skip-button',
+    'button.ytp-ad-skip-button-modern',
+    '.ytp-ad-skip-button-container button',
+    '.ytp-ad-overlay-close-button',
+    '.ytp-ad-skip-button-slot button',
+    '[class*="ytp-ad-skip"] button',
+    '.ytp-ad-survey-answer-button',
+    '.ytp-ad-feedback-dialog-close-button',
+    'button[aria-label*="Skip"]',
+    'button[aria-label*="skip"]'
+  ];
+
   function check(player) {
-    const video = player.querySelector('video.html5-main-video');
-    if (player.classList.contains('ad-showing')) {
+    const video = player.querySelector('video.html5-main-video') || player.querySelector('video');
+    const isAd = player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting');
+
+    if (isAd) {
       if (video) {
         if (!saved) saved = { muted: video.muted, rate: video.playbackRate };
         video.muted = true;
-        video.playbackRate = 16;
-        if (isFinite(video.duration) && video.duration > 0) video.currentTime = video.duration;
+        try { video.playbackRate = 16; } catch (_) {}
+        if (isFinite(video.duration) && video.duration > 0) {
+          video.currentTime = video.duration - 0.01;
+        }
       }
-      const b = player.querySelector(SKIP);
-      if (b) b.click();
+
+      // 1. Selector-based click
+      let clicked = false;
+      const buttons = player.querySelectorAll(SKIP_SELECTORS.join(','));
+      for (let i = 0; i < buttons.length; i++) {
+        try { buttons[i].click(); clicked = true; } catch (_) {}
+      }
+
+      // 2. Text-based fallback
+      if (!clicked) {
+        const anyBtns = player.querySelectorAll('.ytp-ad-module button, .ytp-ad-skip-button-slot *, .ytp-ad-skip-button-container *, .video-ads button');
+        for (let i = 0; i < anyBtns.length; i++) {
+          const txt = (anyBtns[i].textContent || '').trim().toLowerCase();
+          if (txt.includes('skip')) {
+            try { anyBtns[i].click(); } catch (_) {}
+          }
+        }
+      }
     } else if (saved) {
       if (video) { video.muted = saved.muted; video.playbackRate = saved.rate; }
       saved = null;

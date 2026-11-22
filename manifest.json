@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LiteBlock",
-  "version": "3.0.0",
+  "version": "2.0",
   "description": "Lightweight ad, popup and popunder blocker. No timers, no DOM scanning.",
   "minimum_chrome_version": "111",
   "permissions": [
