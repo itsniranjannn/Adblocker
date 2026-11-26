@@ -1,9 +1,9 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=120&color=0:0d1117,50:1e3a8a,100:3b82f6&section=header&text=LiteBlock&fontSize=44&fontColor=ffffff&fontAlignY=38" width="100%" alt="LiteBlock Header"/>
+<img src="https://capsule-render.vercel.app/api?type=shark&height=125&color=0:0d1117,50:1e3a8a,100:3b82f6&section=header&text=LiteBlock&fontSize=44&fontColor=ffffff&fontAlignY=42&animation=blinking" width="100%" alt="LiteBlock Header"/>
 
 <a href="https://github.com/itsniranjannn/Adblocker">
-  <img src="https://readme-typing-svg.demolab.com?font=Poppins&weight=600&size=21&duration=2800&pause=900&color=60A5FA&center=true&vCenter=true&width=680&lines=Lightweight+Manifest+V3+Adblocker.;~102k+ad+%26+tracker+domains+blocked+natively.;Zero+idle+CPU+popup+%26+popunder+shield.;Element+Zapper+%2B+Site+Broken+Diagnose." alt="Typing animation"/>
+  <img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=600&size=20&duration=2600&pause=800&color=60A5FA&center=true&vCenter=true&width=680&lines=Lightweight+Manifest+V3+Adblocker.;~102k+ad+%26+tracker+domains+blocked+natively.;Zero+idle+CPU+popup+%26+popunder+shield.;Element+Zapper+%2B+Site+Broken+Diagnose." alt="Typing animation"/>
 </a>
 
 <br/>
