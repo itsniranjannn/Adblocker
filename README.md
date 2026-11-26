@@ -1,60 +1,70 @@
-# LiteBlock
+<div align="center">
 
-Lightweight Manifest V3 ad / popup / popunder blocker for Chrome, Edge and Brave.
+<img src="https://capsule-render.vercel.app/api?type=waving&height=120&color=0:0d1117,50:1e3a8a,100:3b82f6&section=header&text=LiteBlock&fontSize=44&fontColor=ffffff&fontAlignY=38" width="100%" alt="LiteBlock Header"/>
 
-## Install
-1. Open `chrome://extensions` (or `edge://extensions`), turn on **Developer mode**.
-2. **Load unpacked** and pick this folder.
-3. Pin the icon. Its badge counts blocked requests per tab; the popup shows blocked popups and lets you pause a site.
+<a href="https://github.com/itsniranjannn/Adblocker">
+  <img src="https://readme-typing-svg.demolab.com?font=Poppins&weight=600&size=21&duration=2800&pause=900&color=60A5FA&center=true&vCenter=true&width=680&lines=Lightweight+Manifest+V3+Adblocker.;~102k+ad+%26+tracker+domains+blocked+natively.;Zero+idle+CPU+popup+%26+popunder+shield.;Element+Zapper+%2B+Site+Broken+Diagnose." alt="Typing animation"/>
+</a>
 
-## How it stays light
-| Layer | Mechanism | Idle cost |
-|---|---|---|
-| Ads / trackers | `declarativeNetRequest`, ~102k ad domains (EasyList, EasyPrivacy, Peter Lowe) matched by the browser itself | none (no JS) |
-| Tracking links | `utm_*`, `fbclid`, `gclid`... stripped natively | none (no JS) |
-| Banner slots | `cosmetic.css`, specific selectors only | none (no JS) |
-| Popups / popunders | `shield.js` wraps `window.open` and checks clicks at click time | none (no timers, no observers) |
-| YouTube | strips ad data from player responses, one attribute observer as fallback | negligible |
+<br/>
 
-## Popup rules (shield.js)
-- No real user click: `window.open` is blocked.
-- Cross-site targets are blocked, except sign-in, share and payment hosts in `OK_HOSTS`.
-- Script-made `<a target=_blank>.click()` and invisible full-page click-catching links are blocked.
-- A tab opened from another tab whose load gets blocked is closed automatically. Tabs you open yourself are never touched.
-- A click on the page background that tries to send *this* tab to another site (current-tab clickunder) is cancelled. Redirects after a click on a button/link/clickable card, redirects with no click (logins, SSO) and form posts are never touched. Limit: an ad script that fires on a click on a real button looks the same as a legitimate script, so it is allowed.
-- Hidden-form popunders (`<form target=_blank>` built and submitted by a script on your first mouse press, a favourite of streaming-site ad scripts) are blocked unless the form is visible and you just clicked a real control.
-- A site may open its own mirror domains (`name.fr` to `new15.name.cl`): same site name on a different TLD counts as the same site.
-- A legitimate popup got blocked? Open the icon, see it listed, press **Pause on this site**, or add its host to `OK_HOSTS`.
+![Manifest V3](https://img.shields.io/badge/Manifest-V3-3b82f6?style=for-the-badge&logo=googlechrome&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+![Browsers](https://img.shields.io/badge/Chrome_|_Edge_|_Brave-1f2937?style=for-the-badge)
 
-## Blocked a popup you wanted?
-When you click a button or link and the page tries to open another site, a small notice appears: **Allow once** opens it now, **Always allow** remembers that target site, **Dismiss** ignores it. Nothing is shown for ads that fire on their own (page load, timers, invisible overlays, clickunders), at most one notice per 15 seconds, and it can be switched off in the icon panel. Remembered targets are listed there and removable.
+<br/>
 
-## Zap an element
-An ad slipped through? Open the icon, press **Zap an element**, hover to highlight, click it, then **Hide**. **Bigger** / **Smaller** move up and down the page structure; **Esc** cancels. Links and buttons do nothing while you pick.
-The rule is saved for that site and applied as plain CSS on later visits (no scanning). Class names that look auto-generated are ignored so rules survive site updates. Undo from the icon: **Hidden on this site**, then **Show**.
+**[Overview](#overview) · [Architecture](#how-it-stays-light) · [Install](#install) · [Testing](#tests) · [Connect](#connect)**
 
-## Site broken? Diagnose
-Open the icon, press **Site broken? Diagnose**; the page reloads and records which domains get blocked (for two minutes only, then it stops listening). Reopen the icon, press **Allow** next to the culprit, reload. Your allowed domains are listed and removable in the same panel. Diagnose needs the unpacked install.
+</div>
 
-## Update the filter lists
-```
-npm run rules          # downloads the lists and rebuilds rules/ads.json
-```
-GitHub Actions does this automatically on the 1st of each month (`update-lists.yml`): it rebuilds, runs every test, and only commits if all pass. `ci.yml` runs the full suite on every push.
-`build/allow.txt` lists domains that must never be blocked; `build/seed_domains.txt` is the original hand-collected list. Only plain domain rules are used, so matching stays native and fast.
+---
 
-## Probe a real site
-```
-npm run probe -- https://example.com/      # or list sites in test/sites.local.json (gitignored)
-npm run probe -- --no-ext https://...      # same visit without LiteBlock, for comparison
-```
-Opens a title page, taps around the player like a visitor and prints every tab, popup attempt and anti-adblock message. Throwaway profile, downloads refused.
+## Overview
 
-## Tests
-```
+**LiteBlock** is a lightweight Manifest V3 ad, tracker, popup, and popunder blocker for **Chrome, Edge, and Brave**. It offloads domain blocking to the browser's native `declarativeNetRequest` engine so idle CPU and memory overhead stay near zero.
+
+---
+
+## How It Stays Light
+
+| Layer | Mechanism | Idle Cost |
+| :--- | :--- | :--- |
+| **Ads & Trackers** | `declarativeNetRequest` (~102k domains: EasyList, EasyPrivacy, Peter Lowe) | None (no JS) |
+| **Tracking Links** | `utm_*`, `fbclid`, `gclid` stripped natively | None (no JS) |
+| **Banner Slots** | `cosmetic.css` with specific selectors only | None (no JS) |
+| **Popups / Popunders** | `shield.js` wraps `window.open` and validates real user clicks | None (no timers) |
+| **YouTube** | Prunes ad data from player responses + fallback observer | Negligible |
+
+---
+
+<details>
+<summary><b>Install & Tests (click to expand)</b></summary>
+
+### Install (Unpacked)
+1. Open `chrome://extensions` (or `edge://extensions`) and enable **Developer mode**.
+2. Click **Load unpacked** and select this folder.
+3. Pin the icon to view per-tab blocked counts, **Zap an element**, or **Diagnose** broken sites.
+
+### Tests
+```bash
 npm install
-npm test               # rules checks + real-browser popup / diagnose / pause / zapper / notice tests (Edge or Chrome)
-npm run test:sites     # loads the sites in test/sites.json, fails on stray tabs (edit the list)
-npm run bench          # page load, heap and idle CPU with vs without the extension
+npm test             # Rules checks + real-browser popup/zapper/diagnose tests
+npm run test:sites   # Smoke-tests sites in test/sites.json
+npm run bench        # Page load, heap, and idle CPU benchmark
 ```
-Set `BROWSER_PATH` if Edge/Chrome is installed somewhere unusual.
+
+</details>
+
+---
+
+## Connect
+
+<div align="center">
+
+<a href="mailto:katwalniranjan7@gmail.com"><img src="https://img.shields.io/badge/katwalniranjan7%40gmail.com-D14836?style=for-the-badge&logo=gmail&logoColor=white" alt="Email"/></a>
+<a href="https://github.com/itsniranjannn"><img src="https://img.shields.io/badge/itsniranjannn-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub"/></a>
+
+<img src="https://capsule-render.vercel.app/api?type=waving&height=80&color=0:0d1117,50:1e3a8a,100:3b82f6&section=footer" width="100%" alt=""/>
+
+</div>
